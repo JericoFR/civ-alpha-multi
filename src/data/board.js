@@ -1,0 +1,32 @@
+export const BOARD = [
+  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
+  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
+  ["gris", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "gris"],
+  ["gris", "gris", "gris", "gris", "noir", "noir", "blanc", "noir", "noir", "gris", "gris", "gris", "gris"],
+  ["blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc"],
+  ["blanc", "blanc", "blanc", "vert", "blanc", "blanc", "blanc", "blanc", "blanc", "vert", "blanc", "blanc", "blanc"],
+  ["blanc", "blanc", "blanc", "vert", "blanc", "blanc", "orange", "blanc", "blanc", "vert", "blanc", "blanc", "blanc"],
+  ["blanc", "blanc", "blanc", "blanc", "blanc", "orange", "orange", "orange", "blanc", "blanc", "blanc", "blanc", "blanc"],
+  ["blanc", "blanc", "blanc", "vert", "blanc", "blanc", "orange", "blanc", "blanc", "vert", "blanc", "blanc", "blanc"],
+  ["blanc", "blanc", "blanc", "vert", "blanc", "blanc", "blanc", "blanc", "blanc", "vert", "blanc", "blanc", "blanc"],
+  ["blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc"],
+  ["gris", "gris", "gris", "gris", "noir", "noir", "blanc", "noir", "noir", "gris", "gris", "gris", "gris"],
+  ["gris", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
+  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
+  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
+];
+
+export const CELL_COLORS = {
+  gris: "#9ca3af",
+  blanc: "#e5e7eb",
+  jaune: "#facc15",
+  rouge: "#ef4444",
+  bleu: "#ec4899",
+  vert: "#22c55e",
+  orange: "#f97316",
+  noir: "#111827",
+};
