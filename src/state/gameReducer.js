@@ -14,9 +14,8 @@ import {
   spendCost,
 } from "../logic/economy";
 import { resolveMilitaryPressure } from "../logic/pressure";
-import { createShuffledEraDecks } from "../data/eraCards";
 import { getValidWorkerSpawnCells } from "../logic/buildings";
-import { createInitialState, getPhaseDefinition, initialState, PHASES } from "./initialState";
+import { createInitialState, getPhaseDefinition, PHASES } from "./initialState";
 
 function getNextPhaseKey(currentPhase) {
   const index = PHASES.findIndex((phase) => phase.key === currentPhase);
@@ -168,7 +167,7 @@ function getCompletedTurn(state, nextPhaseKey) {
 
 function applyEraEndScoring(state, completedTurn, draftState) {
   let nextState = draftState;
-  let debugParts = [];
+  const debugParts = [];
 
   if (completedTurn == null) {
     return { nextState, debugParts };
@@ -238,14 +237,19 @@ function maybeAdvanceEraCards(state, nextState, completedTurn) {
     debugText: `Nouvelle phase : ${getPhaseDefinition(nextState.phase).label} | Nouvelle ère : ${nextPointCard?.name ?? "Aucune"} / ${nextEventCard?.name ?? "Aucune"}.`,
   };
 
-  const overflowPlayers = getOverflowPlayers(transitionedState.buildings, transitionedState.units, nextEventCard);
+  const overflowPlayers = getOverflowPlayers(
+    transitionedState.buildings,
+    transitionedState.units,
+    nextEventCard
+  );
 
   return {
     ...transitionedState,
     pendingHousingSacrificePlayers: overflowPlayers,
-    debugText: overflowPlayers.length > 0
-      ? `${transitionedState.debugText} ${formatOverflowMessage(overflowPlayers)}`
-      : transitionedState.debugText,
+    debugText:
+      overflowPlayers.length > 0
+        ? `${transitionedState.debugText} ${formatOverflowMessage(overflowPlayers)}`
+        : transitionedState.debugText,
   };
 }
 
@@ -276,6 +280,7 @@ function buildPhaseTransitionState(state, nextPhaseKey) {
 
   const eraScoring = applyEraEndScoring(state, completedTurn, nextState);
   nextState = eraScoring.nextState;
+
   if (eraScoring.debugParts.length > 0) {
     nextState = {
       ...nextState,
@@ -356,9 +361,11 @@ export function gameReducer(state, action) {
 
         const nextUnits = state.units.filter((currentUnit) => currentUnit.id !== unit.id);
         const remainingQueue = [...state.pendingHousingSacrificePlayers.slice(1)];
-        const newOverflowPlayers = getOverflowPlayers(state.buildings, nextUnits, state.activeEventCard).filter(
-          (player) => !remainingQueue.includes(player)
-        );
+        const newOverflowPlayers = getOverflowPlayers(
+          state.buildings,
+          nextUnits,
+          state.activeEventCard
+        ).filter((player) => !remainingQueue.includes(player));
         const queue = [...remainingQueue, ...newOverflowPlayers];
 
         return {
@@ -474,10 +481,12 @@ export function gameReducer(state, action) {
 
       const nextHand = [...hand];
       nextHand.splice(cardIndex, 1);
+
       const nextResources = {
         ...state.resources,
         [playerKey]: spendCost(state.resources[playerKey], card.cost),
       };
+
       const nextBuildings = [
         ...state.buildings,
         createBuilding(card.createsBuildingType, player, x, y, orientation),
@@ -493,7 +502,13 @@ export function gameReducer(state, action) {
           ...state.cards,
           [playerKey]: nextHand,
         },
-        points: buildersBonus > 0 ? { ...state.points, [playerKey]: (state.points[playerKey] ?? 0) + buildersBonus } : state.points,
+        points:
+          buildersBonus > 0
+            ? {
+                ...state.points,
+                [playerKey]: (state.points[playerKey] ?? 0) + buildersBonus,
+              }
+            : state.points,
         selectedCardKey: null,
         purchaseMode: null,
         purchasePlayer: null,
@@ -546,6 +561,7 @@ export function gameReducer(state, action) {
 
       const playerKey = getPlayerKey(player);
       const workerFoodCost = getWorkerFoodCost(state.activeEventCard);
+
       if ((state.resources[playerKey]?.food ?? 0) < workerFoodCost) {
         return {
           ...state,
@@ -555,6 +571,7 @@ export function gameReducer(state, action) {
 
       const usedHousing = countUsedHousing(state.units, player);
       const capacity = getHousingCapacity(state.buildings, player, state.activeEventCard);
+
       if (usedHousing >= capacity) {
         return {
           ...state,
@@ -563,6 +580,7 @@ export function gameReducer(state, action) {
       }
 
       const validCells = getValidWorkerSpawnCells(state.buildings, state.units, player);
+
       if (validCells.length === 0) {
         return {
           ...state,
@@ -571,6 +589,7 @@ export function gameReducer(state, action) {
       }
 
       const isSameSelection = state.purchaseMode === mode && state.purchasePlayer === player;
+
       return {
         ...state,
         selectedUnitId: null,
@@ -602,6 +621,7 @@ export function gameReducer(state, action) {
 
       const playerKey = getPlayerKey(player);
       const workerFoodCost = getWorkerFoodCost(state.activeEventCard);
+
       if ((state.resources[playerKey]?.food ?? 0) < workerFoodCost) {
         return {
           ...state,
@@ -613,6 +633,7 @@ export function gameReducer(state, action) {
 
       const usedHousing = countUsedHousing(state.units, player);
       const capacity = getHousingCapacity(state.buildings, player, state.activeEventCard);
+
       if (usedHousing >= capacity) {
         return {
           ...state,
@@ -624,6 +645,7 @@ export function gameReducer(state, action) {
 
       const validCells = getValidWorkerSpawnCells(state.buildings, state.units, player);
       const isValid = validCells.some((cell) => cell.x === x && cell.y === y);
+
       if (!isValid) {
         return {
           ...state,
@@ -810,15 +832,35 @@ export function gameReducer(state, action) {
       const result = resolveMilitaryPressure(state.units, state.buildings, {
         buildingBurnThreshold: state.activeEventCard?.key === "instability" ? 2 : 3,
       });
-      const overflowPlayers = getOverflowPlayers(result.buildings, result.units, state.activeEventCard);
-      const warBonus = state.activePointCard?.key === "war_age" ? result.destroyedUnits.filter((unit) => unit.player === 2).length : 0;
-      const warBonusP2 = state.activePointCard?.key === "war_age" ? result.destroyedUnits.filter((unit) => unit.player === 1).length : 0;
+
+      const overflowPlayers = getOverflowPlayers(
+        result.buildings,
+        result.units,
+        state.activeEventCard
+      );
+
+      const warBonus =
+        state.activePointCard?.key === "war_age"
+          ? result.destroyedUnits.filter((unit) => unit.player === 2).length
+          : 0;
+
+      const warBonusP2 =
+        state.activePointCard?.key === "war_age"
+          ? result.destroyedUnits.filter((unit) => unit.player === 1).length
+          : 0;
 
       return {
         ...state,
         units: result.units,
         buildings: result.buildings,
-        points: state.activePointCard?.key === "war_age" ? { ...state.points, player1: (state.points.player1 ?? 0) + warBonus, player2: (state.points.player2 ?? 0) + warBonusP2 } : state.points,
+        points:
+          state.activePointCard?.key === "war_age"
+            ? {
+                ...state.points,
+                player1: (state.points.player1 ?? 0) + warBonus,
+                player2: (state.points.player2 ?? 0) + warBonusP2,
+              }
+            : state.points,
         selectedUnitId: null,
         selectedCardKey: null,
         pendingHousingSacrificePlayers: overflowPlayers,
@@ -906,7 +948,7 @@ export function gameReducer(state, action) {
         };
       }
 
-      if (!["food", "wood", "stone", "metal"].includes(resource)) {
+      if (!["food", "gold"].includes(resource)) {
         return {
           ...state,
           debugText: "Ressource invalide pour la conversion.",
@@ -942,8 +984,7 @@ export function gameReducer(state, action) {
         if (!canUseCentralMarket(state.units, player)) {
           return {
             ...state,
-            debugText:
-              `J${player} ne contrôle pas le Marché central : il faut exactement 1 ouvrier allié sur la croix orange et aucun ennemi dessus.`,
+            debugText: `J${player} ne contrôle pas le Marché central : il faut exactement 1 ouvrier allié sur la croix orange et aucun ennemi dessus.`,
           };
         }
       }
@@ -1002,7 +1043,10 @@ export function gameReducer(state, action) {
         },
         economyCentralBonusUsed: {
           ...state.economyCentralBonusUsed,
-          [playerKey]: selectedMarket === "central" ? true : state.economyCentralBonusUsed?.[playerKey] ?? false,
+          [playerKey]:
+            selectedMarket === "central"
+              ? true
+              : state.economyCentralBonusUsed?.[playerKey] ?? false,
         },
         resourceVersion: (state.resourceVersion ?? 0) + 1,
         debugText: `J${player} convertit ${spent} ${resource} en ${pointsGained} PV via ${marketLabel}${bonusLabel}${commerceLabel}.`,
@@ -1013,19 +1057,21 @@ export function gameReducer(state, action) {
       if (state.phase !== "production") return state;
       if (state.productionDoneThisPhase) return state;
 
-      const result = applyProduction(state.resources, state.buildings, state.units, state.activeEventCard);
+      const result = applyProduction(
+        state.resources,
+        state.buildings,
+        state.units,
+        state.activeEventCard
+      );
+
       const nextResources = {
         player1: {
           food: Number(result.resources.player1.food ?? 0),
-          wood: Number(result.resources.player1.wood ?? 0),
-          stone: Number(result.resources.player1.stone ?? 0),
-          metal: Number(result.resources.player1.metal ?? 0),
+          gold: Number(result.resources.player1.gold ?? 0),
         },
         player2: {
           food: Number(result.resources.player2.food ?? 0),
-          wood: Number(result.resources.player2.wood ?? 0),
-          stone: Number(result.resources.player2.stone ?? 0),
-          metal: Number(result.resources.player2.metal ?? 0),
+          gold: Number(result.resources.player2.gold ?? 0),
         },
       };
 
@@ -1037,8 +1083,8 @@ export function gameReducer(state, action) {
         debugText:
           `Production — J1: ${formatProductionBundle(result.produced.player1)} | ` +
           `J2: ${formatProductionBundle(result.produced.player2)} | ` +
-          `Stocks → J1 ${nextResources.player1.food}/${nextResources.player1.wood}/${nextResources.player1.stone}/${nextResources.player1.metal} · ` +
-          `J2 ${nextResources.player2.food}/${nextResources.player2.wood}/${nextResources.player2.stone}/${nextResources.player2.metal}`,
+          `Stocks → J1 ${nextResources.player1.food}/${nextResources.player1.gold} · ` +
+          `J2 ${nextResources.player2.food}/${nextResources.player2.gold}`,
       };
     }
 
@@ -1147,16 +1193,21 @@ export function gameReducer(state, action) {
       };
     }
 
-    case "SYNC_ROOM_STATE": {
-  const roomState = action.payload?.roomState ?? action.payload;
-  if (!roomState) return state;
+    case "SYNC_ERA_STATE": {
+      const eraState = action.payload?.eraState ?? action.payload;
+      if (!eraState) return state;
 
-  return {
-    ...state,
-    ...roomState,
-    debugText: roomState.debugText ?? state.debugText,
-  };
-}
+      return {
+        ...state,
+        turn: eraState.turn ?? state.turn,
+        phase: eraState.phase ?? state.phase,
+        activePlayer: eraState.activePlayer ?? state.activePlayer,
+        activePointCard: eraState.activePointCard ?? state.activePointCard,
+        activeEventCard: eraState.activeEventCard ?? state.activeEventCard,
+        remainingPointDeck: eraState.remainingPointDeck ?? state.remainingPointDeck,
+        remainingEventDeck: eraState.remainingEventDeck ?? state.remainingEventDeck,
+      };
+    }
 
     case "SET_DEBUG_TEXT": {
       return {
@@ -1180,6 +1231,7 @@ export function gameReducer(state, action) {
     case "ADD_POINTS": {
       const { player, amount } = action.payload;
       const playerKey = getPlayerKey(player);
+
       return {
         ...state,
         points: {

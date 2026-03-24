@@ -1,6 +1,6 @@
 export const BOARD = [
-  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
-  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "vert", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "vert", "blanc", "gris"],
   ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
   ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
   ["gris", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "gris"],
@@ -16,8 +16,8 @@ export const BOARD = [
   ["gris", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "blanc", "gris"],
   ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
   ["gris", "blanc", "vert", "blanc", "vert", "blanc", "bleu", "blanc", "vert", "blanc", "vert", "blanc", "gris"],
-  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
-  ["gris", "blanc", "jaune", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "jaune", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "vert", "blanc", "gris"],
+  ["gris", "blanc", "vert", "blanc", "jaune", "blanc", "rouge", "blanc", "jaune", "blanc", "vert", "blanc", "gris"],
 ];
 
 export const CELL_COLORS = {

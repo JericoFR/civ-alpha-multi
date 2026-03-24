@@ -31,7 +31,30 @@ export function getCellOwner(x, y) {
   return null;
 }
 
-export function canPlaceBuildingAt({ buildings, x, y, orientation = "vertical", player, size = 2 }) {
+function isValidVerticalAnchor(x, y, player) {
+  if (player === 1) {
+    if (y >= 0 && y <= 3) return y === 0 || y === 2;
+    if ((x === 3 || x === 9) && y >= 7 && y <= 8) return y === 7;
+    return false;
+  }
+
+  if (player === 2) {
+    if ((x === 3 || x === 9) && y >= 10 && y <= 11) return y === 10;
+    if (y >= 15 && y <= 18) return y === 15 || y === 17;
+    return false;
+  }
+
+  return false;
+}
+
+export function canPlaceBuildingAt({
+  buildings,
+  x,
+  y,
+  orientation = "vertical",
+  player,
+  size = 2,
+}) {
   const candidateCells = Array.from({ length: size }, (_, index) => ({
     x: x + (orientation === "horizontal" ? index : 0),
     y: y + (orientation === "vertical" ? index : 0),
@@ -39,15 +62,27 @@ export function canPlaceBuildingAt({ buildings, x, y, orientation = "vertical", 
 
   if (candidateCells.length !== size) return false;
 
-  const everyGreen = candidateCells.every((cell) => BOARD[cell.y]?.[cell.x] === "vert");
+  const everyGreen = candidateCells.every(
+    (cell) => BOARD[cell.y]?.[cell.x] === "vert"
+  );
   if (!everyGreen) return false;
 
-  const ownerOk = candidateCells.every((cell) => getCellOwner(cell.x, cell.y) === player);
+  const ownerOk = candidateCells.every(
+    (cell) => getCellOwner(cell.x, cell.y) === player
+  );
   if (!ownerOk) return false;
+
+  if (orientation === "vertical") {
+    if (!isValidVerticalAnchor(x, y, player)) return false;
+  }
 
   const occupied = buildings.some((building) => {
     const cells = normalizeBuildingCells(building);
-    return cells.some((cell) => candidateCells.some((candidate) => candidate.x === cell.x && candidate.y === cell.y));
+    return cells.some((cell) =>
+      candidateCells.some(
+        (candidate) => candidate.x === cell.x && candidate.y === cell.y
+      )
+    );
   });
 
   if (occupied) return false;
@@ -55,16 +90,40 @@ export function canPlaceBuildingAt({ buildings, x, y, orientation = "vertical", 
   return true;
 }
 
-export function getValidBuildingPlacements(buildings, player, { allowHorizontal = true, allowVertical = true, size = 2 } = {}) {
+export function getValidBuildingPlacements(
+  buildings,
+  player,
+  { allowHorizontal = true, allowVertical = true, size = 2 } = {}
+) {
   const placements = [];
 
   for (let y = 0; y < BOARD.length; y += 1) {
     for (let x = 0; x < BOARD[0].length; x += 1) {
-      if (allowVertical && canPlaceBuildingAt({ buildings, x, y, orientation: "vertical", player, size })) {
+      if (
+        allowVertical &&
+        canPlaceBuildingAt({
+          buildings,
+          x,
+          y,
+          orientation: "vertical",
+          player,
+          size,
+        })
+      ) {
         placements.push({ x, y, orientation: "vertical" });
       }
 
-      if (allowHorizontal && canPlaceBuildingAt({ buildings, x, y, orientation: "horizontal", player, size })) {
+      if (
+        allowHorizontal &&
+        canPlaceBuildingAt({
+          buildings,
+          x,
+          y,
+          orientation: "horizontal",
+          player,
+          size,
+        })
+      ) {
         placements.push({ x, y, orientation: "horizontal" });
       }
     }
@@ -76,7 +135,6 @@ export function getValidBuildingPlacements(buildings, player, { allowHorizontal 
 export function isPlacementInList(placements, x, y) {
   return placements.some((placement) => placement.x === x && placement.y === y);
 }
-
 
 export function getValidWorkerSpawnCells(buildings, units, player) {
   const valid = [];
@@ -92,7 +150,12 @@ export function getValidWorkerSpawnCells(buildings, units, player) {
 
     const cells = normalizeBuildingCells(building);
     for (const cell of cells) {
-      const hasEnemy = units.some((unit) => unit.x === cell.x && unit.y === cell.y && unit.player !== player);
+      const hasEnemy = units.some(
+        (unit) =>
+          unit.x === cell.x &&
+          unit.y === cell.y &&
+          unit.player !== player
+      );
       if (hasEnemy) continue;
       valid.push({ x: cell.x, y: cell.y });
     }

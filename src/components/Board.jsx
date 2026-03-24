@@ -24,9 +24,7 @@ function getBuildingLabel(type) {
   if (type === "townhall") return "🏛️";
   if (type === "house") return "🏠";
   if (type === "production_food") return "🌾";
-  if (type === "production_wood") return "🌲";
-  if (type === "production_stone") return "🧱";
-  if (type === "production_metal") return "⛓️";
+  if (type === "production_gold") return "💰";
   if (type === "barracks_1") return "⚔️";
   if (type === "barracks_2") return "🛡️";
   if (type === "market") return "💰";

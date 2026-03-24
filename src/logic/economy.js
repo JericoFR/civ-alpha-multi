@@ -11,8 +11,8 @@ export const CENTRAL_MARKET_CELLS = [
 
 export function createInitialResources() {
   return {
-    player1: { food: 3, wood: 3, stone: 3, metal: 3 },
-    player2: { food: 3, wood: 3, stone: 3, metal: 3 },
+    player1: { food: 3, gold: 3 },
+    player2: { food: 3, gold: 3 },
   };
 }
 
@@ -27,18 +27,14 @@ export function getPlayerKey(player) {
 export function canAfford(resources, cost) {
   return (
     (resources.food ?? 0) >= (cost.food ?? 0) &&
-    (resources.wood ?? 0) >= (cost.wood ?? 0) &&
-    (resources.stone ?? 0) >= (cost.stone ?? 0) &&
-    (resources.metal ?? 0) >= (cost.metal ?? 0)
+    (resources.gold ?? 0) >= (cost.gold ?? 0)
   );
 }
 
 export function spendCost(resources, cost) {
   return {
     food: (resources.food ?? 0) - (cost.food ?? 0),
-    wood: (resources.wood ?? 0) - (cost.wood ?? 0),
-    stone: (resources.stone ?? 0) - (cost.stone ?? 0),
-    metal: (resources.metal ?? 0) - (cost.metal ?? 0),
+    gold: (resources.gold ?? 0) - (cost.gold ?? 0),
   };
 }
 
@@ -87,7 +83,7 @@ function hasAlliedWorkerInside(building, units) {
 }
 
 function createEmptyProduction() {
-  return { food: 0, wood: 0, stone: 0, metal: 0 };
+  return { food: 0, gold: 0 };
 }
 
 export function getProductionPreviewForPlayer(buildings, units, player, activeEventCard = null) {
@@ -111,7 +107,7 @@ export function getProductionPreviewForPlayer(buildings, units, player, activeEv
 
     let totalGain = base + bonus;
 
-    if (activeEventCard?.key === "rare_metal" && def.resource === "metal") {
+    if (activeEventCard?.key === "gold_tension" && def.resource === "gold") {
       totalGain -= 1;
     }
 
@@ -175,9 +171,7 @@ export function getScienceWinner(buildings, units) {
 function addResourceBundle(resources, added) {
   return {
     food: (resources.food ?? 0) + (added.food ?? 0),
-    wood: (resources.wood ?? 0) + (added.wood ?? 0),
-    stone: (resources.stone ?? 0) + (added.stone ?? 0),
-    metal: (resources.metal ?? 0) + (added.metal ?? 0),
+    gold: (resources.gold ?? 0) + (added.gold ?? 0),
   };
 }
 
@@ -197,9 +191,7 @@ export function formatProductionBundle(bundle) {
   const bits = [];
 
   if ((bundle.food ?? 0) > 0) bits.push(`+${bundle.food} 🌾`);
-  if ((bundle.wood ?? 0) > 0) bits.push(`+${bundle.wood} 🌲`);
-  if ((bundle.stone ?? 0) > 0) bits.push(`+${bundle.stone} 🧱`);
-  if ((bundle.metal ?? 0) > 0) bits.push(`+${bundle.metal} ⛓️`);
+  if ((bundle.gold ?? 0) > 0) bits.push(`+${bundle.gold} 💰`);
 
   return bits.length > 0 ? bits.join("  ") : "rien";
 }

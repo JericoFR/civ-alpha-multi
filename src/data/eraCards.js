@@ -45,10 +45,10 @@ export const ERA_EVENT_CARDS = [
     text: 'Les bâtiments passent en feu avec 2 pressions au lieu de 3.',
   },
   {
-    key: 'rare_metal',
-    name: 'Métal Rare',
+    key: 'gold_tension',
+    name: 'Tension sur l’Or',
     type: 'event',
-    text: 'Tous les joueurs produisent -1 métal par tour.',
+    text: 'Les bâtiments d’or produisent -1.',
   },
   {
     key: 'recruitment',

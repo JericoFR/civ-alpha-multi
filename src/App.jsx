@@ -145,9 +145,7 @@ function countRemainingUnitsForPhase(units, activatedUnitIds, phase, player) {
 function getCostLabel(card) {
   const bits = [];
   if (card.cost?.food) bits.push(`${card.cost.food} 🌾`);
-  if (card.cost?.wood) bits.push(`${card.cost.wood} 🌲`);
-  if (card.cost?.stone) bits.push(`${card.cost.stone} 🧱`);
-  if (card.cost?.metal) bits.push(`${card.cost.metal} ⛓️`);
+  if (card.cost?.gold) bits.push(`${card.cost.gold} 💰`);
   return bits.length > 0 ? bits.join(" ") : "gratuit";
 }
 
@@ -368,9 +366,7 @@ function EconomyCompactPanel({
 
   const rows = [
     { key: "food", label: "🌾" },
-    { key: "wood", label: "🌲" },
-    { key: "stone", label: "🧱" },
-    { key: "metal", label: "⛓️" },
+    { key: "gold", label: "💰" },
   ];
 
   function selectMarket(marketType) {
@@ -717,7 +713,7 @@ function RoomPanel({
   );
 }
 
-function buildRoomStateSnapshot(gameState) {
+function buildEraStateSnapshot(gameState) {
   return {
     turn: gameState.turn,
     phase: gameState.phase,
@@ -726,7 +722,6 @@ function buildRoomStateSnapshot(gameState) {
     activeEventCard: gameState.activeEventCard,
     remainingPointDeck: gameState.remainingPointDeck,
     remainingEventDeck: gameState.remainingEventDeck,
-    debugText: gameState.debugText,
   };
 }
 
@@ -877,6 +872,20 @@ export default function App() {
       });
     }
 
+    function handleSpawnWorker(payload) {
+      if (!payload?.player) return;
+
+      dispatch({
+        type: "SPAWN_WORKER",
+        player: payload.player ?? null,
+        payload: {
+          player: payload.player,
+          x: payload.x,
+          y: payload.y,
+        },
+      });
+    }
+
     function handlePassMilitaryTurn(payload) {
       if (!payload?.player) return;
 
@@ -886,13 +895,13 @@ export default function App() {
       });
     }
 
-    function handleRoomStateSync(payload) {
-      if (!payload?.snapshot) return;
+    function handleEraStateSync(payload) {
+      if (!payload?.eraState) return;
 
       dispatch({
-        type: "SYNC_ROOM_STATE",
+        type: "SYNC_ERA_STATE",
         payload: {
-          roomState: payload.snapshot,
+          eraState: payload.eraState,
         },
       });
     }
@@ -917,8 +926,9 @@ export default function App() {
     socket.on("playCard", handlePlayCard);
     socket.on("economyMarketSelected", handleEconomyMarketSelected);
     socket.on("resourcesConverted", handleResourcesConverted);
+    socket.on("spawnWorker", handleSpawnWorker);
     socket.on("passMilitaryTurn", handlePassMilitaryTurn);
-    socket.on("roomStateSync", handleRoomStateSync);
+    socket.on("eraStateSync", handleEraStateSync);
     socket.on("produceResources", handleProduceResources);
     socket.on("errorMessage", handleErrorMessage);
 
@@ -933,8 +943,9 @@ export default function App() {
       socket.off("playCard", handlePlayCard);
       socket.off("economyMarketSelected", handleEconomyMarketSelected);
       socket.off("resourcesConverted", handleResourcesConverted);
+      socket.off("spawnWorker", handleSpawnWorker);
       socket.off("passMilitaryTurn", handlePassMilitaryTurn);
-      socket.off("roomStateSync", handleRoomStateSync);
+      socket.off("eraStateSync", handleEraStateSync);
       socket.off("produceResources", handleProduceResources);
       socket.off("errorMessage", handleErrorMessage);
       socket.disconnect();
@@ -944,9 +955,9 @@ export default function App() {
   useEffect(() => {
     if (!currentRoomId || localPlayer !== 1) return;
 
-    socket.emit("syncRoomState", {
+    socket.emit("syncEraState", {
       roomId: currentRoomId,
-      snapshot: buildRoomStateSnapshot(gameState),
+      eraState: buildEraStateSnapshot(gameState),
     });
   }, [
     currentRoomId,
@@ -1131,12 +1142,24 @@ export default function App() {
 
   function handleCellClick(x, y) {
     if (selectedCard && activePlayer) {
-      const placement = validCardPlacements.find((entry) => {
-        if (entry.orientation === "horizontal") {
-          return (entry.x === x && entry.y === y) || (entry.x + 1 === x && entry.y === y);
-        }
-        return (entry.x === x && entry.y === y) || (entry.x === x && entry.y + 1 === y);
-      });
+      function findPlacement(clickX, clickY) {
+        let match = validCardPlacements.find((p) => p.x === clickX && p.y === clickY);
+        if (match) return match;
+
+        match = validCardPlacements.find(
+          (p) => p.orientation === "horizontal" && p.x + 1 === clickX && p.y === clickY
+        );
+        if (match) return match;
+
+        match = validCardPlacements.find(
+          (p) => p.orientation === "vertical" && p.x === clickX && p.y + 1 === clickY
+        );
+        if (match) return match;
+
+        return null;
+      }
+
+      const placement = findPlacement(x, y);
 
       if (!placement) {
         dispatch({
@@ -1183,6 +1206,15 @@ export default function App() {
         player: localPlayer,
         payload: { player: purchasePlayer, x, y },
       });
+
+      if (currentRoomId) {
+        socket.emit("spawnWorker", {
+          roomId: currentRoomId,
+          player: purchasePlayer,
+          x,
+          y,
+        });
+      }
       return;
     }
 
@@ -1332,7 +1364,6 @@ export default function App() {
           <InfoCard label="Tour dans l'ère" value={`${turnInEra} / ${TURNS_PER_ERA}`} accent="rgba(59, 130, 246, 0.35)" />
           <InfoCard label="Phase" value={currentPhase.label} accent="rgba(16, 185, 129, 0.35)" />
           <InfoCard label="Joueur actif" value={activePlayer ? `J${activePlayer}` : "Global"} accent="rgba(244, 114, 182, 0.35)" />
-          <InfoCard label="Score PV" value={`J1 ${points.player1} — J2 ${points.player2}`} accent="rgba(250, 204, 21, 0.35)" />
           {phase === "military_move" ? (
             <InfoCard
               label="Militaires restants"
@@ -1341,10 +1372,6 @@ export default function App() {
             />
           ) : null}
           <ToggleCard checked={showPressure} onChange={setShowPressure} />
-          <InfoCard label="Prod J1" value={formatProductionBundle(productionPreview.player1)} accent="rgba(96, 165, 250, 0.35)" />
-          <InfoCard label="Prod J2" value={formatProductionBundle(productionPreview.player2)} accent="rgba(248, 113, 113, 0.35)" />
-          <InfoCard label="Science J1" value={`${sciencePreview.player1}`} accent="rgba(96, 165, 250, 0.35)" />
-          <InfoCard label="Science J2" value={`${sciencePreview.player2}`} accent="rgba(248, 113, 113, 0.35)" />
         </div>
       </div>
 
@@ -1359,13 +1386,14 @@ export default function App() {
       >
         <div style={{ padding: 16, display: "flex", flexDirection: "column", minHeight: 0, gap: 16, overflowY: "auto" }}>
           <Sidebar
-            key={`p1-${resourceVersion}-${resources.player1.food}-${resources.player1.wood}-${resources.player1.stone}-${resources.player1.metal}`}
-            title="Joueur 1"
-            resources={resources.player1}
-            housingUsed={player1HousingUsed}
-            housingCapacity={player1HousingCapacity}
-            points={points.player1}
-          >
+  title="Joueur 1"
+  resources={resources.player1}
+  housingUsed={player1HousingUsed}
+  housingCapacity={player1HousingCapacity}
+  points={points.player1}
+  production={productionPreview.player1}
+  science={sciencePreview.player1}
+>
             <HandPanel
               player={1}
               cards={cards.player1}
@@ -1433,26 +1461,6 @@ export default function App() {
             <ActionButton onClick={handleResetGame}>Nouvelle partie</ActionButton>
           </div>
 
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 980,
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              justifyContent: "center",
-              background: "#111827",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: 14,
-              padding: 10,
-              flexShrink: 0,
-            }}
-          >
-            <ActionButton onClick={() => dispatch({ type: "DEBUG_SPAWN_WORKER_J1" })}>+ Worker J1</ActionButton>
-            <ActionButton onClick={() => dispatch({ type: "DEBUG_SPAWN_SOLDIER_J1" })}>+ Soldier J1</ActionButton>
-            <ActionButton onClick={() => dispatch({ type: "DEBUG_SPAWN_WORKER_J2" })}>+ Worker J2</ActionButton>
-            <ActionButton onClick={() => dispatch({ type: "DEBUG_SPAWN_SOLDIER_J2" })}>+ Soldier J2</ActionButton>
-          </div>
 
           {phase === "buy" ? (
             <PurchasePanel
@@ -1533,13 +1541,14 @@ export default function App() {
 
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16, justifyContent: "flex-start", overflowY: "auto" }}>
           <Sidebar
-            key={`p2-${resourceVersion}-${resources.player2.food}-${resources.player2.wood}-${resources.player2.stone}-${resources.player2.metal}`}
-            title="Joueur 2"
-            resources={resources.player2}
-            housingUsed={player2HousingUsed}
-            housingCapacity={player2HousingCapacity}
-            points={points.player2}
-          >
+  title="Joueur 2"
+  resources={resources.player2}
+  housingUsed={player2HousingUsed}
+  housingCapacity={player2HousingCapacity}
+  points={points.player2}
+  production={productionPreview.player2}
+  science={sciencePreview.player2}
+>
             <HandPanel
               player={2}
               cards={cards.player2}
