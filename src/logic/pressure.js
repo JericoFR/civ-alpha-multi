@@ -1,21 +1,68 @@
-import { normalizeBuildingCells } from "./buildings";
+import { normalizeBuildingCells } from "./buildings.js";
 
 function getCellKey(x, y) {
   return `${x},${y}`;
 }
 
+function isInsideBoard(x, y) {
+  return x >= 0 && x < 13 && y >= 0 && y < 19;
+}
+
+function filterInsideBoard(cells) {
+  return cells.filter((cell) => isInsideBoard(cell.x, cell.y));
+}
+
 function getSoldierPressureCells(unit) {
-  return [
+  return filterInsideBoard([
     { x: unit.x, y: unit.y },
     { x: unit.x + 1, y: unit.y },
     { x: unit.x - 1, y: unit.y },
     { x: unit.x, y: unit.y + 1 },
     { x: unit.x, y: unit.y - 1 },
-  ];
+  ]);
+}
+
+function getDirectionalCells(unit, distance) {
+  const direction = unit.direction ?? (unit.player === 1 ? "down" : "up");
+
+  if (direction === "up") {
+    return Array.from({ length: distance }, (_, index) => ({
+      x: unit.x,
+      y: unit.y - (index + 1),
+    }));
+  }
+
+  if (direction === "down") {
+    return Array.from({ length: distance }, (_, index) => ({
+      x: unit.x,
+      y: unit.y + (index + 1),
+    }));
+  }
+
+  if (direction === "left") {
+    return Array.from({ length: distance }, (_, index) => ({
+      x: unit.x - (index + 1),
+      y: unit.y,
+    }));
+  }
+
+  return Array.from({ length: distance }, (_, index) => ({
+    x: unit.x + (index + 1),
+    y: unit.y,
+  }));
+}
+
+function getArcherPressureCells(unit) {
+  return filterInsideBoard([
+    { x: unit.x, y: unit.y },
+    ...getDirectionalCells(unit, 2),
+  ]);
 }
 
 function getPressureCellsForUnit(unit) {
   if (unit.type === "soldier") return getSoldierPressureCells(unit);
+  if (unit.type === "archer") return getArcherPressureCells(unit);
+  if (unit.type === "siege") return getArcherPressureCells(unit);
   return [];
 }
 
@@ -47,7 +94,6 @@ function getEnemyPressure(pressureMap, x, y, player) {
 }
 
 function buildingProtects(building) {
-  // Un bâtiment en feu / désactivé ne protège plus
   if (building.isBurning) return false;
   if (building.isActive === false) return false;
   return true;
@@ -83,10 +129,6 @@ function shouldBurn(building, pressureMap, buildingBurnThreshold = 3) {
 }
 
 function chooseVictimForCell(candidates) {
-  // Priorité validée :
-  // 1) soldier
-  // 2) autres militaires non-worker
-  // 3) worker
   return (
     candidates.find((unit) => unit.type === "soldier") ||
     candidates.find((unit) => unit.type !== "worker") ||
@@ -95,14 +137,7 @@ function chooseVictimForCell(candidates) {
 }
 
 export function resolveMilitaryPressure(units, buildings, options = {}) {
-  // Pression calculée à partir de toutes les unités présentes
-  // au début de la résolution : simultanéité complète.
   const pressureMap = buildPressureMap(units);
-
-  // Protection calculée à partir des bâtiments AVANT application :
-  // - un bâtiment sain protège
-  // - un bâtiment déjà en feu ne protège pas
-  // - un bâtiment qui va brûler ce tour protège encore pour CE tour
   const unitsByCell = {};
 
   for (const unit of units) {
@@ -114,7 +149,6 @@ export function resolveMilitaryPressure(units, buildings, options = {}) {
   const destroyedIds = new Set();
   const burningIds = new Set();
 
-  // Maximum 1 mort par case
   for (const key in unitsByCell) {
     const cellUnits = unitsByCell[key];
 
@@ -137,7 +171,6 @@ export function resolveMilitaryPressure(units, buildings, options = {}) {
     destroyedIds.add(victim.id);
   }
 
-  // Bâtiments qui passent en feu
   const buildingBurnThreshold = options.buildingBurnThreshold ?? 3;
 
   for (const building of buildings) {

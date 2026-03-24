@@ -1,8 +1,20 @@
 import { io } from "socket.io-client";
 
-// ⚠️ IMPORTANT : URL serveur Render (version online)
-const SOCKET_URL = "https://civ-alpha-multi.onrender.com";
+const SERVER_URL =
+  window.location.hostname === "localhost"
+    ? "http://localhost:3001"
+    : "https://civ-alpha.onrender.com"; // 
 
-export const socket = io(SOCKET_URL, {
+export const socket = io(SERVER_URL, {
   autoConnect: false,
+  transports: ["websocket"],
+});
+
+// 🔥 Debug utile
+socket.on("connect", () => {
+  console.log("🟢 Socket connecté :", socket.id);
+});
+
+socket.on("disconnect", () => {
+  console.log("🔴 Socket déconnecté");
 });

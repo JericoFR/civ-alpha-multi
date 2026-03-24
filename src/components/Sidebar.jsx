@@ -1,3 +1,19 @@
+function normalizePoints(points) {
+  if (typeof points === "number") {
+    return {
+      eco: points,
+      military: 0,
+      build: 0,
+    };
+  }
+
+  return {
+    eco: points?.eco ?? 0,
+    military: points?.military ?? 0,
+    build: points?.build ?? 0,
+  };
+}
+
 export default function Sidebar({
   title,
   resources,
@@ -8,6 +24,10 @@ export default function Sidebar({
   science = 0,
   children = null,
 }) {
+  const normalizedPoints = normalizePoints(points);
+  const totalPoints =
+    normalizedPoints.eco + normalizedPoints.military + normalizedPoints.build;
+
   return (
     <div
       style={{
@@ -21,7 +41,6 @@ export default function Sidebar({
     >
       <h2 style={{ marginTop: 0, fontSize: 20 }}>{title}</h2>
 
-      {/* RESSOURCES */}
       <div style={{ marginBottom: 12 }}>
         <strong>Ressources</strong>
       </div>
@@ -29,7 +48,6 @@ export default function Sidebar({
       <div>🌾 Nourriture : {resources.food}</div>
       <div>💰 Or : {resources.gold}</div>
 
-      {/* PRODUCTION */}
       {production && (
         <>
           <div style={{ marginTop: 16 }}>
@@ -39,13 +57,11 @@ export default function Sidebar({
         </>
       )}
 
-      {/* SCIENCE */}
       <div style={{ marginTop: 16 }}>
         <strong>Science</strong>
       </div>
       <div>{science}</div>
 
-      {/* LOGEMENT */}
       <div style={{ marginTop: 16 }}>
         <strong>Logements</strong>
       </div>
@@ -53,11 +69,19 @@ export default function Sidebar({
         {housingUsed} / {housingCapacity}
       </div>
 
-      {/* SCORE */}
       <div style={{ marginTop: 16 }}>
         <strong>PV</strong>
       </div>
-      <div>{points}</div>
+      <div>Total : {totalPoints}</div>
+      <div style={{ marginTop: 6, fontSize: 14, opacity: 0.9 }}>
+        💰 Éco : {normalizedPoints.eco}
+      </div>
+      <div style={{ fontSize: 14, opacity: 0.9 }}>
+        ⚔️ Militaire : {normalizedPoints.military}
+      </div>
+      <div style={{ fontSize: 14, opacity: 0.9 }}>
+        🏗️ Construction : {normalizedPoints.build}
+      </div>
 
       {children}
     </div>

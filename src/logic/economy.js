@@ -1,5 +1,5 @@
-import { BUILDING_DEFS } from "../data/buildings";
-import { normalizeBuildingCells } from "./buildings";
+import { BUILDING_DEFS } from "../data/buildings.js";
+import { normalizeBuildingCells } from "./buildings.js";
 
 export const CENTRAL_MARKET_CELLS = [
   { x: 6, y: 8 },

@@ -1,5 +1,6 @@
-import { CARD_DEFS } from "../data/cards";
-import { isMilitaryUnit, moveUnit } from "../logic/movement";
+import { CARD_DEFS } from "../data/cards.js";
+import { UNIT_DEFS, getDefaultUnitDirection } from "../data/units.js";
+import { isMilitaryUnit, moveUnit } from "../logic/movement.js";
 import {
   applyProduction,
   canAfford,
@@ -12,10 +13,10 @@ import {
   getScienceWinner,
   hasActivePersonalMarket,
   spendCost,
-} from "../logic/economy";
-import { resolveMilitaryPressure } from "../logic/pressure";
-import { getValidWorkerSpawnCells } from "../logic/buildings";
-import { createInitialState, getPhaseDefinition, PHASES } from "./initialState";
+} from "../logic/economy.js";
+import { resolveMilitaryPressure } from "../logic/pressure.js";
+import { getValidMilitarySpawnCells, getValidWorkerSpawnCells } from "../logic/buildings.js";
+import { createInitialState, getPhaseDefinition, PHASES } from "./initialState.js";
 
 function getNextPhaseKey(currentPhase) {
   const index = PHASES.findIndex((phase) => phase.key === currentPhase);
@@ -31,11 +32,74 @@ function getPlayerKey(player) {
   return player === 1 ? "player1" : "player2";
 }
 
-function createDebugUnit(type, player, x, y) {
+function normalizePlayerPoints(pointsEntry) {
+  if (typeof pointsEntry === "number") {
+    return {
+      eco: pointsEntry,
+      military: 0,
+      build: 0,
+    };
+  }
+
   return {
-    id: `debug-${type}-${player}-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`,
+    eco: pointsEntry?.eco ?? 0,
+    military: pointsEntry?.military ?? 0,
+    build: pointsEntry?.build ?? 0,
+  };
+}
+
+function addPointsToAxis(pointsState, playerKey, axis, amount) {
+  const current = normalizePlayerPoints(pointsState?.[playerKey]);
+
+  return {
+    ...pointsState,
+    [playerKey]: {
+      ...current,
+      [axis]: (current[axis] ?? 0) + amount,
+    },
+  };
+}
+
+function getUnitPurchaseCost(unitType, activeEventCard = null) {
+  if (unitType === "worker") {
+    return { food: getWorkerFoodCost(activeEventCard), gold: 0 };
+  }
+
+  const def = UNIT_DEFS[unitType];
+  return {
+    food: def?.cost?.food ?? 0,
+    gold: def?.cost?.gold ?? 0,
+  };
+}
+
+function createSpawnedUnit(type, player, x, y, unitId = null) {
+  const baseUnit = createDebugUnit(type, player, x, y, unitId);
+
+  if (type === "archer" || type === "siege") {
+    return {
+      ...baseUnit,
+      direction: getDefaultUnitDirection(player),
+    };
+  }
+
+  return baseUnit;
+}
+
+function getValidSpawnCellsForPurchaseMode(state, player, mode) {
+  if (mode === "worker") {
+    return getValidWorkerSpawnCells(state.buildings, state.units, player);
+  }
+
+  return getValidMilitarySpawnCells(state.buildings, state.units, player, mode);
+}
+
+function createDebugUnit(type, player, x, y, unitId = null) {
+  return {
+    id:
+      unitId ??
+      `debug-${type}-${player}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
     type,
     player,
     x,
@@ -69,10 +133,12 @@ function getEligibleMilitaryUnits(units, activatedUnitIds, player) {
 }
 
 function getStartingMilitaryPlayer(units, activatedUnitIds = []) {
-  const player1HasUnits = getEligibleMilitaryUnits(units, activatedUnitIds, 1).length > 0;
+  const player1HasUnits =
+    getEligibleMilitaryUnits(units, activatedUnitIds, 1).length > 0;
   if (player1HasUnits) return 1;
 
-  const player2HasUnits = getEligibleMilitaryUnits(units, activatedUnitIds, 2).length > 0;
+  const player2HasUnits =
+    getEligibleMilitaryUnits(units, activatedUnitIds, 2).length > 0;
   if (player2HasUnits) return 2;
 
   return null;
@@ -80,11 +146,13 @@ function getStartingMilitaryPlayer(units, activatedUnitIds = []) {
 
 function getNextMilitaryPlayerAfterAction(units, activatedUnitIds, currentPlayer) {
   const otherPlayer = getOtherPlayer(currentPlayer);
-  const otherHasUnits = getEligibleMilitaryUnits(units, activatedUnitIds, otherPlayer).length > 0;
+  const otherHasUnits =
+    getEligibleMilitaryUnits(units, activatedUnitIds, otherPlayer).length > 0;
 
   if (otherHasUnits) return otherPlayer;
 
-  const currentHasUnits = getEligibleMilitaryUnits(units, activatedUnitIds, currentPlayer).length > 0;
+  const currentHasUnits =
+    getEligibleMilitaryUnits(units, activatedUnitIds, currentPlayer).length > 0;
   if (currentHasUnits) return currentPlayer;
 
   return null;
@@ -92,7 +160,9 @@ function getNextMilitaryPlayerAfterAction(units, activatedUnitIds, currentPlayer
 
 function getOverflowPlayers(buildings, units, activeEventCard = null) {
   return [1, 2].filter(
-    (player) => countUsedHousing(units, player) > getHousingCapacity(buildings, player, activeEventCard)
+    (player) =>
+      countUsedHousing(units, player) >
+      getHousingCapacity(buildings, player, activeEventCard)
   );
 }
 
@@ -101,7 +171,9 @@ function formatOverflowMessage(players) {
   if (players.length === 1) {
     return `Logement dépassé pour J${players[0]} : choisis 1 unité ou ouvrier à sacrifier.`;
   }
-  return `Logement dépassé pour J${players.join(" puis J")} : choisis 1 unité ou ouvrier à sacrifier pour chaque joueur.`;
+  return `Logement dépassé pour J${players.join(
+    " puis J"
+  )} : choisis 1 unité ou ouvrier à sacrifier pour chaque joueur.`;
 }
 
 function resetEconomySelectionForPhase(state, nextPhaseKey) {
@@ -146,12 +218,12 @@ function resetEconomySelectionForPhase(state, nextPhaseKey) {
   };
 }
 
-function finishMilitaryPhase(state, debugText) {
+function finishMilitaryPhase(state, debugText, selectedUnitId = null) {
   return {
     ...state,
     phase: "military_resolve",
     activePlayer: null,
-    selectedUnitId: null,
+    selectedUnitId,
     selectedCardKey: null,
     purchaseMode: null,
     purchasePlayer: null,
@@ -180,7 +252,7 @@ function applyEraEndScoring(state, completedTurn, draftState) {
     if (j1Controls) {
       nextState = {
         ...nextState,
-        points: { ...nextState.points, player1: (nextState.points.player1 ?? 0) + 2 },
+        points: addPointsToAxis(nextState.points, "player1", "eco", 2),
       };
       debugParts.push("+2 PV centre pour J1");
     }
@@ -188,7 +260,7 @@ function applyEraEndScoring(state, completedTurn, draftState) {
     if (j2Controls) {
       nextState = {
         ...nextState,
-        points: { ...nextState.points, player2: (nextState.points.player2 ?? 0) + 2 },
+        points: addPointsToAxis(nextState.points, "player2", "eco", 2),
       };
       debugParts.push("+2 PV centre pour J2");
     }
@@ -201,14 +273,21 @@ function applyEraEndScoring(state, completedTurn, draftState) {
     const j2Gain = Math.floor(j2Units / 2);
 
     if (j1Gain > 0 || j2Gain > 0) {
+      let nextPoints = nextState.points;
+
+      if (j1Gain > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player1", "eco", j1Gain);
+      }
+
+      if (j2Gain > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player2", "eco", j2Gain);
+      }
+
       nextState = {
         ...nextState,
-        points: {
-          ...nextState.points,
-          player1: (nextState.points.player1 ?? 0) + j1Gain,
-          player2: (nextState.points.player2 ?? 0) + j2Gain,
-        },
+        points: nextPoints,
       };
+
       debugParts.push(`Fin d'ère démographie : J1 +${j1Gain} / J2 +${j2Gain}`);
     }
   }
@@ -234,7 +313,11 @@ function maybeAdvanceEraCards(state, nextState, completedTurn) {
     activeEventCard: nextEventCard,
     remainingPointDeck: state.remainingPointDeck.slice(1),
     remainingEventDeck: state.remainingEventDeck.slice(1),
-    debugText: `Nouvelle phase : ${getPhaseDefinition(nextState.phase).label} | Nouvelle ère : ${nextPointCard?.name ?? "Aucune"} / ${nextEventCard?.name ?? "Aucune"}.`,
+    debugText: `Nouvelle phase : ${
+      getPhaseDefinition(nextState.phase).label
+    } | Nouvelle ère : ${nextPointCard?.name ?? "Aucune"} / ${
+      nextEventCard?.name ?? "Aucune"
+    }.`,
   };
 
   const overflowPlayers = getOverflowPlayers(
@@ -315,13 +398,17 @@ function buildMilitaryResolutionDebug(result) {
 
   if (result.destroyedUnits.length > 0) {
     bits.push(
-      `${result.destroyedUnits.length} unité${result.destroyedUnits.length > 1 ? "s" : ""} détruite${result.destroyedUnits.length > 1 ? "s" : ""}`
+      `${result.destroyedUnits.length} unité${
+        result.destroyedUnits.length > 1 ? "s" : ""
+      } détruite${result.destroyedUnits.length > 1 ? "s" : ""}`
     );
   }
 
   if (result.burningBuildings.length > 0) {
     bits.push(
-      `${result.burningBuildings.length} bâtiment${result.burningBuildings.length > 1 ? "s" : ""} en feu`
+      `${result.burningBuildings.length} bâtiment${
+        result.burningBuildings.length > 1 ? "s" : ""
+      } en feu`
     );
   }
 
@@ -432,7 +519,9 @@ export function gameReducer(state, action) {
         debugText:
           state.selectedCardKey === cardKey
             ? "Carte désélectionnée."
-            : `Carte sélectionnée : ${CARD_DEFS[cardKey]?.name ?? cardKey}. Clique un emplacement valide du plateau.`,
+            : `Carte sélectionnée : ${
+                CARD_DEFS[cardKey]?.name ?? cardKey
+              }. Clique un emplacement valide du plateau.`,
       };
     }
 
@@ -440,7 +529,17 @@ export function gameReducer(state, action) {
       const { player, cardKey, x, y, orientation } = action.payload;
       const playerKey = getPlayerKey(player);
       const card = CARD_DEFS[cardKey];
+
       if (!card) return state;
+
+      const currentEra = Math.ceil(state.turn / 10);
+
+      if (currentEra < card.era) {
+        return {
+          ...state,
+          debugText: `${card.name} nécessite l’ère ${card.era}.`,
+        };
+      }
 
       if (action.player && action.player !== player) {
         return {
@@ -493,6 +592,7 @@ export function gameReducer(state, action) {
       ];
 
       const buildersBonus = state.activePointCard?.key === "builders_age" ? 2 : 0;
+      const buildPointsGained = (card.buildPoints ?? 1) + buildersBonus;
 
       return {
         ...state,
@@ -502,18 +602,14 @@ export function gameReducer(state, action) {
           ...state.cards,
           [playerKey]: nextHand,
         },
-        points:
-          buildersBonus > 0
-            ? {
-                ...state.points,
-                [playerKey]: (state.points[playerKey] ?? 0) + buildersBonus,
-              }
-            : state.points,
+        points: addPointsToAxis(state.points, playerKey, "build", buildPointsGained),
         selectedCardKey: null,
         purchaseMode: null,
         purchasePlayer: null,
         resourceVersion: (state.resourceVersion ?? 0) + 1,
-        debugText: `${card.name} posée par J${player} en ${x},${y} (${orientation}). Coût payé immédiatement.${buildersBonus > 0 ? ` +${buildersBonus} PV bâtisseurs.` : ""}`,
+        debugText: `${card.name} posée par J${player} en ${x},${y} (${orientation}). Coût payé immédiatement.${
+          buildPointsGained > 0 ? ` +${buildPointsGained} PV construction.` : ""
+        }`,
       };
     }
 
@@ -527,8 +623,7 @@ export function gameReducer(state, action) {
         debugText: action.payload?.debugText ?? "Sélection retirée.",
       };
     }
-
-    case "SET_PURCHASE_MODE": {
+        case "SET_PURCHASE_MODE": {
       const { mode, player } = action.payload;
 
       if (action.player && action.player !== player) {
@@ -552,20 +647,20 @@ export function gameReducer(state, action) {
         };
       }
 
-      if (mode !== "worker") {
+      if (!["worker", "soldier", "archer"].includes(mode)) {
         return {
           ...state,
-          debugText: "Seul l'achat d'ouvrier est disponible pour le moment.",
+          debugText: "Cet achat n'est pas encore disponible.",
         };
       }
 
       const playerKey = getPlayerKey(player);
-      const workerFoodCost = getWorkerFoodCost(state.activeEventCard);
+      const cost = getUnitPurchaseCost(mode, state.activeEventCard);
 
-      if ((state.resources[playerKey]?.food ?? 0) < workerFoodCost) {
+      if (!canAfford(state.resources[playerKey], cost)) {
         return {
           ...state,
-          debugText: `J${player} n'a pas assez de nourriture pour acheter un ouvrier (${workerFoodCost} 🌾).`,
+          debugText: `J${player} n'a pas assez de ressources pour acheter ${UNIT_DEFS[mode]?.name ?? mode}.`,
         };
       }
 
@@ -579,12 +674,15 @@ export function gameReducer(state, action) {
         };
       }
 
-      const validCells = getValidWorkerSpawnCells(state.buildings, state.units, player);
+      const validCells = getValidSpawnCellsForPurchaseMode(state, player, mode);
 
       if (validCells.length === 0) {
         return {
           ...state,
-          debugText: `Aucune case valide de spawn pour un ouvrier de J${player}.`,
+          debugText:
+            mode === "worker"
+              ? `Aucune case valide de spawn pour un ouvrier de J${player}.`
+              : `Aucune case valide de spawn pour ${UNIT_DEFS[mode]?.name ?? mode} de J${player}. Vérifie la caserne active et l'ouvrier dedans.`,
         };
       }
 
@@ -598,12 +696,14 @@ export function gameReducer(state, action) {
         purchasePlayer: isSameSelection ? null : player,
         debugText: isSameSelection
           ? `Achat annulé pour J${player}.`
-          : `Achat ouvrier J${player} sélectionné : clique une case valide d'hôtel de ville ou de logement actif.`,
+          : mode === "worker"
+          ? `Achat ouvrier J${player} sélectionné : clique une case valide d'hôtel de ville ou de logement actif.`
+          : `Achat ${UNIT_DEFS[mode]?.name ?? mode} J${player} sélectionné : clique une case libre d'une caserne active avec ouvrier.`,
       };
     }
 
     case "SPAWN_WORKER": {
-      const { player, x, y } = action.payload;
+  const { player, x, y, unitId } = action.payload;
 
       if (action.player && action.player !== player) {
         return {
@@ -655,7 +755,7 @@ export function gameReducer(state, action) {
 
       return {
         ...state,
-        units: [...state.units, createDebugUnit("worker", player, x, y)],
+        units: [...state.units, createDebugUnit("worker", player, x, y, unitId)],
         resources: {
           ...state.resources,
           [playerKey]: {
@@ -667,6 +767,125 @@ export function gameReducer(state, action) {
         purchasePlayer: null,
         resourceVersion: (state.resourceVersion ?? 0) + 1,
         debugText: `Ouvrier acheté par J${player} en ${x},${y} pour ${workerFoodCost} nourriture.`,
+      };
+    }
+
+    case "SPAWN_UNIT": {
+  const { player, unitType, x, y, unitId } = action.payload;
+
+      if (action.player && action.player !== player) {
+        return {
+          ...state,
+          debugText: "Action refusée : tu ne peux pas faire apparaître une unité pour l'autre joueur.",
+        };
+      }
+
+      if (state.phase !== "buy") {
+        return {
+          ...state,
+          debugText: "Le spawn d'unité n'est possible qu'en phase buy.",
+        };
+      }
+
+      if (!["soldier", "archer"].includes(unitType)) {
+        return {
+          ...state,
+          debugText: "Cette unité n'est pas encore disponible à l'achat.",
+        };
+      }
+
+      const playerKey = getPlayerKey(player);
+      const cost = getUnitPurchaseCost(unitType, state.activeEventCard);
+
+      if (!canAfford(state.resources[playerKey], cost)) {
+        return {
+          ...state,
+          purchaseMode: null,
+          purchasePlayer: null,
+          debugText: `J${player} n'a pas assez de ressources pour acheter ${UNIT_DEFS[unitType]?.name ?? unitType}.`,
+        };
+      }
+
+      const usedHousing = countUsedHousing(state.units, player);
+      const capacity = getHousingCapacity(state.buildings, player, state.activeEventCard);
+
+      if (usedHousing >= capacity) {
+        return {
+          ...state,
+          purchaseMode: null,
+          purchasePlayer: null,
+          debugText: `Achat bloqué pour J${player} : logement plein (${usedHousing}/${capacity}).`,
+        };
+      }
+
+      const validCells = getValidMilitarySpawnCells(state.buildings, state.units, player, unitType);
+      const isValid = validCells.some((cell) => cell.x === x && cell.y === y);
+
+      if (!isValid) {
+        return {
+          ...state,
+          debugText: `Case invalide pour faire apparaître ${UNIT_DEFS[unitType]?.name ?? unitType} de J${player}.`,
+        };
+      }
+
+      const spawnedUnit = createSpawnedUnit(unitType, player, x, y, unitId);
+
+      return {
+        ...state,
+        units: [...state.units, spawnedUnit],
+        resources: {
+          ...state.resources,
+          [playerKey]: spendCost(state.resources[playerKey], cost),
+        },
+        selectedUnitId: unitType === "archer" || unitType === "siege" ? spawnedUnit.id : null,
+        purchaseMode: null,
+        purchasePlayer: null,
+        resourceVersion: (state.resourceVersion ?? 0) + 1,
+        debugText:
+          unitType === "archer" || unitType === "siege"
+            ? `${UNIT_DEFS[unitType]?.name ?? unitType} acheté par J${player} en ${x},${y}. Orientation prête à être choisie.`
+            : `${UNIT_DEFS[unitType]?.name ?? unitType} acheté par J${player} en ${x},${y}.`,
+      };
+    }
+
+    case "SET_UNIT_DIRECTION": {
+      const { unitId, direction } = action.payload;
+      const unit = state.units.find((currentUnit) => currentUnit.id === unitId);
+
+      if (!unit) {
+        return {
+          ...state,
+          debugText: "Unité introuvable pour changer l'orientation.",
+        };
+      }
+
+      if (action.player && unit.player !== action.player) {
+        return {
+          ...state,
+          debugText: "Action refusée : tu ne peux pas orienter une unité adverse.",
+        };
+      }
+
+      if (!["up", "right", "down", "left"].includes(direction)) {
+        return {
+          ...state,
+          debugText: "Orientation invalide.",
+        };
+      }
+
+      if (unit.type !== "archer" && unit.type !== "siege") {
+        return {
+          ...state,
+          debugText: "Cette unité n'utilise pas d'orientation.",
+        };
+      }
+
+      return {
+        ...state,
+        units: state.units.map((currentUnit) =>
+          currentUnit.id === unitId ? { ...currentUnit, direction } : currentUnit
+        ),
+        debugText: `${UNIT_DEFS[unit.type]?.name ?? unit.type} orienté vers ${direction}.`,
       };
     }
 
@@ -719,7 +938,9 @@ export function gameReducer(state, action) {
       }
 
       const updatedUnits = moveUnit(state.units, unitId, x, y);
-      const tracksActivations = ["player_1", "player_2", "military_move"].includes(state.phase);
+      const tracksActivations = ["player_1", "player_2", "military_move"].includes(
+        state.phase
+      );
       const nextActivatedIds = tracksActivations
         ? [...state.phaseActivatedUnitIds, unitId]
         : state.phaseActivatedUnitIds;
@@ -732,19 +953,26 @@ export function gameReducer(state, action) {
         );
 
         if (nextMilitaryPlayer === null) {
-          return finishMilitaryPhase(
-            {
-              ...state,
-              units: updatedUnits,
-            },
-            `Dernière activation militaire jouée vers ${x},${y}. Passage à la résolution militaire.`
-          );
-        }
+  const keepSelectedAfterMove =
+    movedUnit.type === "archer" || movedUnit.type === "siege";
+
+  return finishMilitaryPhase(
+    {
+      ...state,
+      units: updatedUnits,
+    },
+    `Dernière activation militaire jouée vers ${x},${y}. Passage à la résolution militaire.`,
+    keepSelectedAfterMove ? unitId : null
+  );
+}
+
+        const keepSelectedAfterMove =
+          movedUnit.type === "archer" || movedUnit.type === "siege";
 
         return {
           ...state,
           units: updatedUnits,
-          selectedUnitId: null,
+          selectedUnitId: keepSelectedAfterMove ? unitId : null,
           phaseActivatedUnitIds: nextActivatedIds,
           militaryConsecutivePasses: 0,
           activePlayer: nextMilitaryPlayer,
@@ -755,10 +983,13 @@ export function gameReducer(state, action) {
         };
       }
 
+      const keepSelectedAfterMove =
+        movedUnit.type === "archer" || movedUnit.type === "siege";
+
       return {
         ...state,
         units: updatedUnits,
-        selectedUnitId: null,
+        selectedUnitId: keepSelectedAfterMove ? unitId : null,
         phaseActivatedUnitIds: nextActivatedIds,
         debugText: `Déplacement validé vers ${x},${y}`,
       };
@@ -786,8 +1017,7 @@ export function gameReducer(state, action) {
         state.phaseActivatedUnitIds,
         otherPlayer
       ).length > 0;
-
-      if (!currentHasUnits && !otherHasUnits) {
+            if (!currentHasUnits && !otherHasUnits) {
         return finishMilitaryPhase(
           state,
           "Plus aucune unité militaire disponible. Passage à la résolution militaire."
@@ -839,35 +1069,34 @@ export function gameReducer(state, action) {
         state.activeEventCard
       );
 
-      const warBonus =
-        state.activePointCard?.key === "war_age"
-          ? result.destroyedUnits.filter((unit) => unit.player === 2).length
-          : 0;
+      const militaryPointsP1 =
+        result.destroyedUnits.filter((unit) => unit.player === 2).length +
+        result.burningBuildings.filter((building) => building.player === 2).length;
 
-      const warBonusP2 =
-        state.activePointCard?.key === "war_age"
-          ? result.destroyedUnits.filter((unit) => unit.player === 1).length
-          : 0;
+      const militaryPointsP2 =
+        result.destroyedUnits.filter((unit) => unit.player === 1).length +
+        result.burningBuildings.filter((building) => building.player === 1).length;
+
+      let nextPoints = state.points;
+
+      if (militaryPointsP1 > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player1", "military", militaryPointsP1);
+      }
+
+      if (militaryPointsP2 > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player2", "military", militaryPointsP2);
+      }
 
       return {
         ...state,
         units: result.units,
         buildings: result.buildings,
-        points:
-          state.activePointCard?.key === "war_age"
-            ? {
-                ...state.points,
-                player1: (state.points.player1 ?? 0) + warBonus,
-                player2: (state.points.player2 ?? 0) + warBonusP2,
-              }
-            : state.points,
-        selectedUnitId: null,
-        selectedCardKey: null,
+        points: nextPoints,
         pendingHousingSacrificePlayers: overflowPlayers,
         debugText:
           overflowPlayers.length > 0
-            ? `${buildMilitaryResolutionDebug(result)}${state.activePointCard?.key === "war_age" ? ` | Guerre : J1 +${warBonus} / J2 +${warBonusP2} PV.` : ""} ${formatOverflowMessage(overflowPlayers)}`
-            : `${buildMilitaryResolutionDebug(result)}${state.activePointCard?.key === "war_age" ? ` | Guerre : J1 +${warBonus} / J2 +${warBonusP2} PV.` : ""}`,
+            ? `${buildMilitaryResolutionDebug(result)} ${formatOverflowMessage(overflowPlayers)}`
+            : buildMilitaryResolutionDebug(result),
       };
     }
 
@@ -878,14 +1107,14 @@ export function gameReducer(state, action) {
       if (action.player && action.player !== player) {
         return {
           ...state,
-          debugText: "Action refusée : tu ne peux pas choisir le marché de l'autre joueur.",
+          debugText: "Action refusée : tu ne peux pas choisir l'économie pour l'autre joueur.",
         };
       }
 
       if (!["economy_1", "economy_2"].includes(state.phase)) {
         return {
           ...state,
-          debugText: "Le choix du marché n'est possible que pendant la phase économie.",
+          debugText: "Le choix du marché n'est possible qu'en phase économie.",
         };
       }
 
@@ -899,14 +1128,28 @@ export function gameReducer(state, action) {
       if (!["personal", "central"].includes(marketType)) {
         return {
           ...state,
-          debugText: "Type de marché invalide.",
+          debugText: "Marché invalide.",
         };
       }
 
       if (state.economyChoiceLocked[playerKey]) {
         return {
           ...state,
-          debugText: "Le marché est déjà verrouillé pour cette phase économie.",
+          debugText: `Le choix du marché est déjà verrouillé pour J${player} sur cette phase.`,
+        };
+      }
+
+      if (marketType === "personal" && !hasActivePersonalMarket(state.buildings, state.units, player)) {
+        return {
+          ...state,
+          debugText: `J${player} ne peut pas choisir son Marché personnel : aucun marché actif avec un ouvrier dedans.`,
+        };
+      }
+
+      if (marketType === "central" && !canUseCentralMarket(state.units, player)) {
+        return {
+          ...state,
+          debugText: `J${player} ne peut pas choisir le Marché central : il faut exactement 1 ouvrier allié sur la croix orange et aucun ennemi dessus.`,
         };
       }
 
@@ -916,10 +1159,9 @@ export function gameReducer(state, action) {
           ...state.economySelection,
           [playerKey]: marketType,
         },
-        debugText:
-          marketType === "central"
-            ? `J${player} choisit le Marché central pour cette phase économie.`
-            : `J${player} choisit son Marché personnel pour cette phase économie.`,
+        debugText: `J${player} choisit le ${
+          marketType === "central" ? "Marché central" : "Marché personnel"
+        }.`,
       };
     }
 
@@ -1008,17 +1250,20 @@ export function gameReducer(state, action) {
 
       const spent = lots * 5;
       const centralBonusAlreadyUsed = state.economyCentralBonusUsed?.[playerKey] ?? false;
-      const centralBonusGranted = selectedMarket === "central" && !centralBonusAlreadyUsed ? 1 : 0;
+      const centralBonusGranted =
+        selectedMarket === "central" && !centralBonusAlreadyUsed ? 1 : 0;
       const commerceBonus = state.activePointCard?.key === "commerce_age" ? lots : 0;
       const pointsGained = lots + centralBonusGranted + commerceBonus;
-      const marketLabel = selectedMarket === "central" ? "Marché central" : "Marché personnel";
+      const marketLabel =
+        selectedMarket === "central" ? "Marché central" : "Marché personnel";
       const bonusLabel =
         selectedMarket === "central"
           ? centralBonusGranted > 0
             ? " (+1 PV bonus centre, 1 fois ce tour)"
             : " (bonus centre déjà utilisé ce tour)"
           : "";
-      const commerceLabel = commerceBonus > 0 ? ` (+${commerceBonus} PV commerce)` : "";
+      const commerceLabel =
+        commerceBonus > 0 ? ` (+${commerceBonus} PV commerce)` : "";
 
       return {
         ...state,
@@ -1029,10 +1274,7 @@ export function gameReducer(state, action) {
             [resource]: available - spent,
           },
         },
-        points: {
-          ...state.points,
-          [playerKey]: (state.points[playerKey] ?? 0) + pointsGained,
-        },
+        points: addPointsToAxis(state.points, playerKey, "eco", pointsGained),
         economySelection: {
           ...state.economySelection,
           [playerKey]: selectedMarket,
@@ -1087,8 +1329,7 @@ export function gameReducer(state, action) {
           `J2 ${nextResources.player2.food}/${nextResources.player2.gold}`,
       };
     }
-
-    case "OPEN_SCIENCE_PEEK": {
+        case "OPEN_SCIENCE_PEEK": {
       const { pileType } = action.payload;
 
       if (state.phase !== "science") {
@@ -1139,8 +1380,12 @@ export function gameReducer(state, action) {
           card,
         },
         debugText: card
-          ? `J${winner.player} regarde la prochaine carte ${pileType === "points" ? "Points" : "Événement"}.`
-          : `J${winner.player} voulait regarder la pile ${pileType === "points" ? "Points" : "Événement"}, mais elle est vide.`,
+          ? `J${winner.player} regarde la prochaine carte ${
+              pileType === "points" ? "Points" : "Événement"
+            }.`
+          : `J${winner.player} voulait regarder la pile ${
+              pileType === "points" ? "Points" : "Événement"
+            }, mais elle est vide.`,
       };
     }
 
@@ -1229,15 +1474,12 @@ export function gameReducer(state, action) {
     }
 
     case "ADD_POINTS": {
-      const { player, amount } = action.payload;
+      const { player, amount, axis = "eco" } = action.payload;
       const playerKey = getPlayerKey(player);
 
       return {
         ...state,
-        points: {
-          ...state.points,
-          [playerKey]: (state.points[playerKey] ?? 0) + amount,
-        },
+        points: addPointsToAxis(state.points, playerKey, axis, amount),
       };
     }
 

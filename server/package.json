@@ -1,9 +1,9 @@
 {
   "name": "civ-alpha-server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index.mjs",
   "scripts": {
-  "start": "node index.cjs"
+  "start": "node index.mjs"
 },
   "dependencies": {
     "express": "^4.21.2",

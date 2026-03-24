@@ -1,5 +1,5 @@
-import { BOARD } from "../data/board";
-import { UNIT_DEFS } from "../data/units";
+import { BOARD } from "../data/board.js";
+import { UNIT_DEFS } from "../data/units.js";
 
 export function makeCellKey(x, y) {
   return `${x},${y}`;

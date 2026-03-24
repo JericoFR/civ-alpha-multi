@@ -1,8 +1,8 @@
-import { INITIAL_UNITS } from "../data/units";
-import { INITIAL_BUILDINGS } from "../data/buildings";
-import { INITIAL_HANDS } from "../data/cards";
-import { createInitialResources } from "../logic/economy";
-import { createShuffledEraDecks } from "../data/eraCards";
+import { INITIAL_UNITS } from "../data/units.js";
+import { INITIAL_BUILDINGS } from "../data/buildings.js";
+import { INITIAL_HANDS } from "../data/cards.js";
+import { createInitialResources } from "../logic/economy.js";
+import { createShuffledEraDecks } from "../data/eraCards.js";
 
 export const PHASES = [
   { key: "player_1", label: "Phase joueurs — J1", activePlayer: 1 },
@@ -23,7 +23,7 @@ export function getPhaseDefinition(phaseKey) {
 function ensureStartingHands(hands) {
   const clonedHands = structuredClone(hands ?? { player1: [], player2: [] });
 
-  const requiredCards = ["barracks_1", "school"];
+  const requiredCards = ["house", "field", "gold_mine", "barracks_1", "market", "school"];
 
   for (const playerKey of ["player1", "player2"]) {
     if (!Array.isArray(clonedHands[playerKey])) {
@@ -52,10 +52,20 @@ export function createInitialState() {
     units: structuredClone(INITIAL_UNITS),
     buildings: structuredClone(INITIAL_BUILDINGS),
     resources: createInitialResources(),
+
     points: {
-      player1: 0,
-      player2: 0,
+      player1: {
+        eco: 0,
+        military: 0,
+        build: 0,
+      },
+      player2: {
+        eco: 0,
+        military: 0,
+        build: 0,
+      },
     },
+
     cards: startingHands,
 
     selectedUnitId: null,
@@ -67,6 +77,7 @@ export function createInitialState() {
     productionDoneThisPhase: false,
     resourceVersion: 0,
     pendingHousingSacrificePlayers: [],
+
     economySelection: {
       player1: null,
       player2: null,
@@ -79,6 +90,7 @@ export function createInitialState() {
       player1: false,
       player2: false,
     },
+
     scienceActionUsedThisPhase: false,
     sciencePeek: null,
 
@@ -87,7 +99,9 @@ export function createInitialState() {
     remainingPointDeck: eraSetup.remainingPointDeck,
     remainingEventDeck: eraSetup.remainingEventDeck,
 
-    debugText: `Clique une unité pour la sélectionner. Ère I : ${eraSetup.activePointCard?.name ?? "Aucune"} / ${eraSetup.activeEventCard?.name ?? "Aucune"}.`,
+    debugText: `Clique une unité pour la sélectionner. Ère I : ${
+      eraSetup.activePointCard?.name ?? "Aucune"
+    } / ${eraSetup.activeEventCard?.name ?? "Aucune"}.`,
   };
 }
 

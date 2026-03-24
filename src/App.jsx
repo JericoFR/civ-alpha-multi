@@ -7,7 +7,6 @@ import {
   countUsedHousing,
   canAfford,
   canUseCentralMarket,
-  formatProductionBundle,
   getCentralMarketStatus,
   getHousingCapacity,
   getProductionPreview,
@@ -17,24 +16,13 @@ import {
   hasActivePersonalMarket,
 } from "./logic/economy";
 import { canMoveTo, getReachableCells, isMilitaryUnit } from "./logic/movement";
-import { getValidBuildingPlacements, getValidWorkerSpawnCells } from "./logic/buildings";
+import { getValidBuildingPlacements, getValidWorkerSpawnCells, getValidMilitarySpawnCells } from "./logic/buildings";
 import { buildPressureMap } from "./logic/pressure";
 import { gameReducer } from "./state/gameReducer";
 import { getPhaseDefinition, initialState } from "./state/initialState";
 
 const TURNS_PER_ERA = 10;
 const TOTAL_ERAS = 4;
-const SYNCED_PHASE_ORDER = [
-  "player_1",
-  "player_2",
-  "military_move",
-  "military_resolve",
-  "buy",
-  "economy_1",
-  "economy_2",
-  "production",
-  "science",
-];
 
 function ActionButton({ children, onClick, disabled = false }) {
   return (
@@ -257,19 +245,55 @@ function EraCardPanel({ title, card, accent }) {
   );
 }
 
-function PurchasePanel({ resources, purchaseMode, purchasePlayer, dispatch, activeEventCard, localPlayer }) {
+function PurchasePanel({ resources, purchaseMode, purchasePlayer, onSetPurchaseMode, activeEventCard }) {
   const workerFoodCost = getWorkerFoodCost(activeEventCard);
+
+  function getPlayerResources(player) {
+    return player === 1 ? resources.player1 : resources.player2;
+  }
+
   const options = [
-    { key: "worker", label: "Ouvrier", cost: `${workerFoodCost} 🌾`, enabled: true },
-    { key: "soldier", label: "Soldat cac", cost: "à venir", enabled: false },
-    { key: "archer", label: "Archer", cost: "à venir", enabled: false },
-    { key: "cavalry", label: "Cavalier", cost: "à venir", enabled: false },
-    { key: "siege", label: "Siège", cost: "à venir", enabled: false },
+    {
+      key: "worker",
+      label: "Ouvrier",
+      costLabel: `${workerFoodCost} 🌾`,
+      getCost: () => ({ food: workerFoodCost, gold: 0 }),
+      enabled: true,
+    },
+    {
+      key: "soldier",
+      label: "Soldat cac",
+      costLabel: "2 🌾 1 💰",
+      getCost: () => ({ food: 2, gold: 1 }),
+      enabled: true,
+    },
+    {
+      key: "archer",
+      label: "Archer",
+      costLabel: "1 🌾 2 💰",
+      getCost: () => ({ food: 1, gold: 2 }),
+      enabled: true,
+    },
+    {
+      key: "cavalry",
+      label: "Cavalier",
+      costLabel: "à venir",
+      getCost: () => ({ food: 999, gold: 999 }),
+      enabled: false,
+    },
+    {
+      key: "siege",
+      label: "Siège",
+      costLabel: "à venir",
+      getCost: () => ({ food: 999, gold: 999 }),
+      enabled: false,
+    },
   ];
 
   function renderPlayerColumn(player) {
-    const playerKey = player === 1 ? "player1" : "player2";
-    const food = resources[playerKey]?.food ?? 0;
+    const playerResources = getPlayerResources(player);
+    const food = playerResources?.food ?? 0;
+    const gold = playerResources?.gold ?? 0;
 
     return (
       <div
@@ -285,18 +309,22 @@ function PurchasePanel({ resources, purchaseMode, purchasePlayer, dispatch, acti
         }}
       >
         <div style={{ fontWeight: 700 }}>Achats J{player}</div>
-        <div style={{ fontSize: 12, opacity: 0.78 }}>Nourriture dispo : {food}</div>
+        <div style={{ fontSize: 12, opacity: 0.78 }}>
+          Nourriture dispo : {food} {` `}
+          {typeof gold === "number" ? `· Or dispo : ${gold}` : ""}
+        </div>
 
         {options.map((option) => {
           const selected = purchaseMode === option.key && purchasePlayer === player;
-          const disabled = !option.enabled || (option.key === "worker" && food < workerFoodCost);
+          const affordable = canAfford(playerResources, option.getCost());
+          const disabled = !option.enabled || !affordable;
 
           return (
             <button
               key={`${player}-${option.key}`}
               type="button"
               disabled={disabled}
-              onClick={() => dispatch({ type: "SET_PURCHASE_MODE", player: localPlayer, payload: { mode: option.key, player } })}
+              onClick={() => onSetPurchaseMode(option.key, player)}
               style={{
                 borderRadius: 12,
                 border: selected ? "2px solid rgba(34, 197, 94, 0.95)" : "1px solid rgba(255,255,255,0.12)",
@@ -305,11 +333,14 @@ function PurchasePanel({ resources, purchaseMode, purchasePlayer, dispatch, acti
                 padding: "10px 12px",
                 textAlign: "left",
                 cursor: disabled ? "not-allowed" : "pointer",
-                opacity: disabled ? 0.55 : 1,
+                opacity: disabled ? 0.45 : 1,
               }}
             >
               <div style={{ fontWeight: 700 }}>{option.label}</div>
-              <div style={{ fontSize: 12, opacity: 0.8 }}>{option.cost}</div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>
+                {option.costLabel}
+                {!affordable && option.enabled ? " · insuffisant" : ""}
+              </div>
             </button>
           );
         })}
@@ -333,7 +364,8 @@ function PurchasePanel({ resources, purchaseMode, purchasePlayer, dispatch, acti
     >
       <div style={{ fontWeight: 700 }}>Fenêtre d'achats</div>
       <div style={{ fontSize: 12, opacity: 0.78 }}>
-        Seul l'ouvrier est activé pour le moment. Choisis un achat puis clique une case valide sur un hôtel de ville ou logement actif.
+        Choisis un achat puis clique une case valide. Ouvrier : hôtel de ville / logement actif. Soldat + Archer :
+        caserne active avec ouvrier.
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {renderPlayerColumn(1)}
@@ -351,8 +383,8 @@ function EconomyCompactPanel({
   units,
   economySelection,
   economyChoiceLocked,
-  dispatch,
-  localPlayer,
+  onSelectEconomyMarket,
+  onConvertResources,
 }) {
   if (!["economy_1", "economy_2"].includes(phase) || !activePlayer) return null;
 
@@ -368,14 +400,6 @@ function EconomyCompactPanel({
     { key: "food", label: "🌾" },
     { key: "gold", label: "💰" },
   ];
-
-  function selectMarket(marketType) {
-    dispatch({
-      type: "SELECT_ECONOMY_MARKET",
-      player: localPlayer,
-      payload: { player: activePlayer, marketType },
-    });
-  }
 
   return (
     <div
@@ -402,7 +426,7 @@ function EconomyCompactPanel({
         <button
           type="button"
           disabled={!personalAvailable || isLocked}
-          onClick={() => selectMarket("personal")}
+          onClick={() => onSelectEconomyMarket(activePlayer, "personal")}
           style={{
             borderRadius: 12,
             padding: 12,
@@ -426,7 +450,7 @@ function EconomyCompactPanel({
         <button
           type="button"
           disabled={!centralAvailable || isLocked}
-          onClick={() => selectMarket("central")}
+          onClick={() => onSelectEconomyMarket(activePlayer, "central")}
           style={{
             borderRadius: 12,
             padding: 12,
@@ -486,25 +510,13 @@ function EconomyCompactPanel({
               <div style={{ fontSize: 13, opacity: 0.82 }}>Stock : {stock}</div>
               <ActionButton
                 disabled={maxLots < 1 || noMarketSelected}
-                onClick={() =>
-                  dispatch({
-                    type: "CONVERT_RESOURCES",
-                    player: localPlayer,
-                    payload: { player: activePlayer, resource: row.key, lots: 1 },
-                  })
-                }
+                onClick={() => onConvertResources(activePlayer, row.key, 1)}
               >
                 5 → {selectedMarket === "central" ? "1 PV (bonus centre global +1 max/tour)" : "1 PV"}
               </ActionButton>
               <ActionButton
                 disabled={maxLots < 1 || noMarketSelected}
-                onClick={() =>
-                  dispatch({
-                    type: "CONVERT_RESOURCES",
-                    player: localPlayer,
-                    payload: { player: activePlayer, resource: row.key, lots: maxLots },
-                  })
-                }
+                onClick={() => onConvertResources(activePlayer, row.key, maxLots)}
               >
                 Tout ({maxLots})
               </ActionButton>
@@ -713,20 +725,43 @@ function RoomPanel({
   );
 }
 
-function buildEraStateSnapshot(gameState) {
-  return {
-    turn: gameState.turn,
-    phase: gameState.phase,
-    activePlayer: gameState.activePlayer,
-    activePointCard: gameState.activePointCard,
-    activeEventCard: gameState.activeEventCard,
-    remainingPointDeck: gameState.remainingPointDeck,
-    remainingEventDeck: gameState.remainingEventDeck,
-  };
+function appStateReducer(state, action) {
+  if (action?.type === "HYDRATE_STATE") {
+    return {
+      ...initialState,
+      ...action.payload,
+      resources: {
+        ...initialState.resources,
+        ...(action.payload?.resources ?? {}),
+      },
+      points: {
+        ...initialState.points,
+        ...(action.payload?.points ?? {}),
+      },
+      cards: {
+        ...initialState.cards,
+        ...(action.payload?.cards ?? {}),
+      },
+      economySelection: {
+        ...initialState.economySelection,
+        ...(action.payload?.economySelection ?? {}),
+      },
+      economyChoiceLocked: {
+        ...initialState.economyChoiceLocked,
+        ...(action.payload?.economyChoiceLocked ?? {}),
+      },
+      economyCentralBonusUsed: {
+        ...initialState.economyCentralBonusUsed,
+        ...(action.payload?.economyCentralBonusUsed ?? {}),
+      },
+    };
+  }
+
+  return gameReducer(state, action);
 }
 
 export default function App() {
-  const [gameState, dispatch] = useReducer(gameReducer, initialState);
+  const [gameState, dispatch] = useReducer(appStateReducer, initialState);
   const [showPressure, setShowPressure] = useState(true);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [socketId, setSocketId] = useState("");
@@ -737,22 +772,22 @@ export default function App() {
   const [localPlayer, setLocalPlayer] = useState(null);
 
   const currentRoomIdRef = useRef("");
-  const localPhaseIndexRef = useRef(SYNCED_PHASE_ORDER.indexOf(initialState.phase));
-  const gameStateRef = useRef(gameState);
-
-  const localPhaseIndex = SYNCED_PHASE_ORDER.indexOf(gameState.phase);
 
   useEffect(() => {
     currentRoomIdRef.current = currentRoomId;
   }, [currentRoomId]);
 
-  useEffect(() => {
-    localPhaseIndexRef.current = localPhaseIndex;
-  }, [localPhaseIndex]);
+  function applyAction(action) {
+    if (currentRoomIdRef.current) {
+      socket.emit("GAME_ACTION", {
+        roomId: currentRoomIdRef.current,
+        action,
+      });
+      return;
+    }
 
-  useEffect(() => {
-    gameStateRef.current = gameState;
-  }, [gameState]);
+    dispatch(action);
+  }
 
   useEffect(() => {
     function handleConnect() {
@@ -770,22 +805,29 @@ export default function App() {
       setRoomMessage("Déconnecté du serveur.");
     }
 
-    function handleRoomCreated({ roomId, players, playerNumber }) {
-      setCurrentRoomId(roomId);
-      setRoomPlayerCount(players?.length ?? 1);
-      setRoomCodeInput(roomId);
-      setLocalPlayer(playerNumber ?? 1);
-      setRoomMessage(`Room créée : ${roomId} | Tu es J${playerNumber ?? 1}`);
+    function hydrateFromRoom(data, fallbackMessage) {
+      setCurrentRoomId(data.roomId);
+      setRoomPlayerCount(data.players?.length ?? 0);
+      setRoomCodeInput(data.roomId ?? "");
+      if (data.playerNumber) {
+        setLocalPlayer(data.playerNumber);
+      }
+      setRoomMessage(fallbackMessage);
+
+      if (data.gameState) {
+        dispatch({ type: "HYDRATE_STATE", payload: data.gameState });
+      }
     }
 
-    function handleRoomJoined({ roomId, players, playerNumber }) {
-      setCurrentRoomId(roomId);
-      setRoomPlayerCount(players?.length ?? 0);
-      setRoomCodeInput(roomId);
-      if (playerNumber) {
-        setLocalPlayer(playerNumber);
-      }
-      setRoomMessage(`Room rejointe : ${roomId} (${players?.length ?? 0}/2 joueurs)${playerNumber ? ` | Tu es J${playerNumber}` : ""}`);
+    function handleRoomCreated(data) {
+      hydrateFromRoom(data, `Room créée : ${data.roomId} | Tu es J${data.playerNumber ?? 1}`);
+    }
+
+    function handleRoomJoined(data) {
+      hydrateFromRoom(
+        data,
+        `Room rejointe : ${data.roomId} (${data.players?.length ?? 0}/2 joueurs)${data.playerNumber ? ` | Tu es J${data.playerNumber}` : ""}`
+      );
     }
 
     function handleRoomUpdate({ roomId, players }) {
@@ -799,115 +841,9 @@ export default function App() {
       }
     }
 
-    function handleGameStateUpdate(serverState) {
-      if (serverState?.phaseIndex == null) return;
-
-      const localIndex = localPhaseIndexRef.current;
-      if (localIndex < 0) return;
-
-      const totalPhases = SYNCED_PHASE_ORDER.length;
-      const normalizedServerIndex = serverState.phaseIndex % totalPhases;
-      const stepCount = (normalizedServerIndex - localIndex + totalPhases) % totalPhases;
-
-      for (let i = 0; i < stepCount; i += 1) {
-        dispatch({ type: "NEXT_PHASE" });
-      }
-    }
-
-    function handleUnitMoved(payload) {
-      if (!payload?.unitId) return;
-
-      dispatch({
-        type: "MOVE_UNIT",
-        player: payload.player ?? null,
-        payload: {
-          unitId: payload.unitId,
-          x: payload.x,
-          y: payload.y,
-        },
-      });
-    }
-
-    function handlePlayCard(payload) {
-      if (!payload?.cardKey) return;
-
-      dispatch({
-        type: "PLAY_CARD",
-        player: payload.player ?? null,
-        payload: {
-          player: payload.player,
-          cardKey: payload.cardKey,
-          x: payload.x,
-          y: payload.y,
-          orientation: payload.orientation,
-        },
-      });
-    }
-
-    function handleEconomyMarketSelected(payload) {
-      if (!payload?.marketType || !payload?.player) return;
-
-      dispatch({
-        type: "SELECT_ECONOMY_MARKET",
-        player: payload.player ?? null,
-        payload: {
-          player: payload.player,
-          marketType: payload.marketType,
-        },
-      });
-    }
-
-    function handleResourcesConverted(payload) {
-      if (!payload?.player || !payload?.resource || !payload?.lots) return;
-
-      dispatch({
-        type: "CONVERT_RESOURCES",
-        player: payload.player ?? null,
-        payload: {
-          player: payload.player,
-          resource: payload.resource,
-          lots: payload.lots,
-          marketType: payload.marketType,
-        },
-      });
-    }
-
-    function handleSpawnWorker(payload) {
-      if (!payload?.player) return;
-
-      dispatch({
-        type: "SPAWN_WORKER",
-        player: payload.player ?? null,
-        payload: {
-          player: payload.player,
-          x: payload.x,
-          y: payload.y,
-        },
-      });
-    }
-
-    function handlePassMilitaryTurn(payload) {
-      if (!payload?.player) return;
-
-      dispatch({
-        type: "PASS_MILITARY_TURN",
-        player: payload.player,
-      });
-    }
-
-    function handleEraStateSync(payload) {
-      if (!payload?.eraState) return;
-
-      dispatch({
-        type: "SYNC_ERA_STATE",
-        payload: {
-          eraState: payload.eraState,
-        },
-      });
-    }
-
-    function handleProduceResources() {
-      dispatch({ type: "PRODUCE_RESOURCES" });
+    function handleGameState(serverState) {
+      if (!serverState) return;
+      dispatch({ type: "HYDRATE_STATE", payload: serverState });
     }
 
     function handleErrorMessage(message) {
@@ -921,15 +857,7 @@ export default function App() {
     socket.on("roomCreated", handleRoomCreated);
     socket.on("roomJoined", handleRoomJoined);
     socket.on("roomUpdate", handleRoomUpdate);
-    socket.on("gameStateUpdate", handleGameStateUpdate);
-    socket.on("unitMoved", handleUnitMoved);
-    socket.on("playCard", handlePlayCard);
-    socket.on("economyMarketSelected", handleEconomyMarketSelected);
-    socket.on("resourcesConverted", handleResourcesConverted);
-    socket.on("spawnWorker", handleSpawnWorker);
-    socket.on("passMilitaryTurn", handlePassMilitaryTurn);
-    socket.on("eraStateSync", handleEraStateSync);
-    socket.on("produceResources", handleProduceResources);
+    socket.on("GAME_STATE", handleGameState);
     socket.on("errorMessage", handleErrorMessage);
 
     return () => {
@@ -938,39 +866,11 @@ export default function App() {
       socket.off("roomCreated", handleRoomCreated);
       socket.off("roomJoined", handleRoomJoined);
       socket.off("roomUpdate", handleRoomUpdate);
-      socket.off("gameStateUpdate", handleGameStateUpdate);
-      socket.off("unitMoved", handleUnitMoved);
-      socket.off("playCard", handlePlayCard);
-      socket.off("economyMarketSelected", handleEconomyMarketSelected);
-      socket.off("resourcesConverted", handleResourcesConverted);
-      socket.off("spawnWorker", handleSpawnWorker);
-      socket.off("passMilitaryTurn", handlePassMilitaryTurn);
-      socket.off("eraStateSync", handleEraStateSync);
-      socket.off("produceResources", handleProduceResources);
+      socket.off("GAME_STATE", handleGameState);
       socket.off("errorMessage", handleErrorMessage);
       socket.disconnect();
     };
   }, []);
-
-  useEffect(() => {
-    if (!currentRoomId || localPlayer !== 1) return;
-
-    socket.emit("syncEraState", {
-      roomId: currentRoomId,
-      eraState: buildEraStateSnapshot(gameState),
-    });
-  }, [
-    currentRoomId,
-    localPlayer,
-    roomPlayerCount,
-    gameState.turn,
-    gameState.phase,
-    gameState.activePlayer,
-    gameState.activePointCard,
-    gameState.activeEventCard,
-    gameState.remainingPointDeck,
-    gameState.remainingEventDeck,
-  ]);
 
   const {
     turn,
@@ -987,7 +887,6 @@ export default function App() {
     cards,
     phaseActivatedUnitIds,
     productionDoneThisPhase,
-    resourceVersion,
     pendingHousingSacrificePlayers,
     economySelection,
     economyChoiceLocked,
@@ -1064,42 +963,17 @@ export default function App() {
     return getValidWorkerSpawnCells(buildings, units, purchasePlayer);
   }, [phase, purchaseMode, purchasePlayer, buildings, units]);
 
-  function handleSelectEconomyMarket(player, marketType) {
-    dispatch({
-      type: "SELECT_ECONOMY_MARKET",
-      player: localPlayer,
-      payload: { player, marketType },
-    });
+  const militarySpawnCells = useMemo(() => {
+    if (phase !== "buy" || !purchasePlayer) return [];
+    if (purchaseMode !== "soldier" && purchaseMode !== "archer") return [];
+    return getValidMilitarySpawnCells(buildings, units, purchasePlayer, purchaseMode);
+  }, [phase, purchaseMode, purchasePlayer, buildings, units]);
 
-    if (currentRoomId) {
-      socket.emit("selectEconomyMarket", {
-        roomId: currentRoomId,
-        player,
-        marketType,
-      });
-    }
-  }
-
-  function handleConvertResources(player, resource, lots) {
-    const playerKey = player === 1 ? "player1" : "player2";
-    const marketType = gameState.economySelection[playerKey];
-
-    dispatch({
-      type: "CONVERT_RESOURCES",
-      player: localPlayer,
-      payload: { player, resource, lots, marketType },
-    });
-
-    if (currentRoomId) {
-      socket.emit("convertResources", {
-        roomId: currentRoomId,
-        player,
-        resource,
-        lots,
-        marketType,
-      });
-    }
-  }
+  const spawnCells = useMemo(() => {
+    if (purchaseMode === "worker") return workerSpawnCells;
+    if (purchaseMode === "soldier" || purchaseMode === "archer") return militarySpawnCells;
+    return [];
+  }, [purchaseMode, workerSpawnCells, militarySpawnCells]);
 
   function handleCreateRoom() {
     if (!isSocketConnected) {
@@ -1122,22 +996,79 @@ export default function App() {
       return;
     }
 
-    socket.emit("joinRoom", { roomId: cleaned });
+    socket.emit("joinRoom", cleaned);
+  }
+
+  function handleSelectCard(player, cardKey) {
+    applyAction({ type: "SELECT_CARD", player: localPlayer, payload: { player, cardKey } });
+  }
+
+  function handleSetPurchaseMode(mode, player) {
+    applyAction({ type: "SET_PURCHASE_MODE", player: localPlayer, payload: { mode, player } });
+  }
+
+  function handleSelectEconomyMarket(player, marketType) {
+    applyAction({ type: "SELECT_ECONOMY_MARKET", player: localPlayer, payload: { player, marketType } });
+  }
+
+  function handleConvertResources(player, resource, lots) {
+    const playerKey = player === 1 ? "player1" : "player2";
+    const marketType = gameState.economySelection[playerKey];
+
+    applyAction({
+      type: "CONVERT_RESOURCES",
+      player: localPlayer,
+      payload: { player, resource, lots, marketType },
+    });
   }
 
   function handleUnitClick(unit) {
     if (pendingHousingSacrificePlayers.length > 0) {
-      dispatch({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
+      applyAction({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
+      return;
+    }
+
+    if (localPlayer && unit.player !== localPlayer && currentRoomId) {
+      applyAction({ type: "SET_DEBUG_TEXT", payload: { text: "Tu ne peux pas sélectionner une unité adverse." } });
+      return;
+    }
+
+    const isDirectionalUnit = unit.type === "archer" || unit.type === "siege";
+
+    if (phase !== "player_1" && phase !== "player_2" && phase !== "military_move") {
+      applyAction({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
+      return;
+    }
+
+    if (phase === "buy" && isDirectionalUnit) {
+      applyAction({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
       return;
     }
 
     const selectionError = getUnitSelectionError(unit, phase, activePlayer, phaseActivatedUnitIds);
-    if (selectionError) {
-      dispatch({ type: "SET_DEBUG_TEXT", payload: { text: selectionError } });
+
+    if (selectionError && isDirectionalUnit) {
+      applyAction({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
       return;
     }
 
-    dispatch({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
+    if (selectionError) {
+      applyAction({ type: "SET_DEBUG_TEXT", payload: { text: selectionError } });
+      return;
+    }
+
+    applyAction({ type: "SELECT_UNIT", player: localPlayer, payload: { unit } });
+  }
+
+  function handleSetSelectedUnitDirection(direction) {
+    if (!selectedUnit) return;
+    if (selectedUnit.type !== "archer" && selectedUnit.type !== "siege") return;
+
+    applyAction({
+      type: "SET_UNIT_DIRECTION",
+      player: localPlayer,
+      payload: { unitId: selectedUnit.id, direction },
+    });
   }
 
   function handleCellClick(x, y) {
@@ -1162,14 +1093,14 @@ export default function App() {
       const placement = findPlacement(x, y);
 
       if (!placement) {
-        dispatch({
+        applyAction({
           type: "SET_DEBUG_TEXT",
           payload: { text: `Emplacement invalide pour ${selectedCard.name} : ${x},${y}` },
         });
         return;
       }
 
-      dispatch({
+      applyAction({
         type: "PLAY_CARD",
         player: localPlayer,
         payload: {
@@ -1180,121 +1111,110 @@ export default function App() {
           orientation: placement.orientation,
         },
       });
-
-      if (currentRoomId) {
-        socket.emit("playCard", {
-          roomId: currentRoomId,
-          player: activePlayer,
-          cardKey: selectedCard.key,
-          x: placement.x,
-          y: placement.y,
-          orientation: placement.orientation,
-        });
-      }
       return;
     }
 
-    if (phase === "buy" && purchaseMode === "worker" && purchasePlayer) {
-      const valid = workerSpawnCells.some((cell) => cell.x === x && cell.y === y);
-      if (!valid) {
-        dispatch({ type: "SET_DEBUG_TEXT", payload: { text: `Case invalide pour spawn ouvrier : ${x},${y}` } });
+    if (phase === "buy" && purchaseMode && purchasePlayer) {
+      if (purchaseMode === "worker") {
+        const valid = workerSpawnCells.some((cell) => cell.x === x && cell.y === y);
+        if (!valid) {
+          applyAction({ type: "SET_DEBUG_TEXT", payload: { text: `Case invalide pour spawn ouvrier : ${x},${y}` } });
+          return;
+        }
+
+        applyAction({
+          type: "SPAWN_WORKER",
+          player: localPlayer,
+          payload: { player: purchasePlayer, x, y },
+        });
         return;
       }
 
-      dispatch({
-        type: "SPAWN_WORKER",
-        player: localPlayer,
-        payload: { player: purchasePlayer, x, y },
-      });
+      if (purchaseMode === "soldier" || purchaseMode === "archer") {
+        const valid = militarySpawnCells.some((cell) => cell.x === x && cell.y === y);
+        if (!valid) {
+          applyAction({
+            type: "SET_DEBUG_TEXT",
+            payload: { text: `Case invalide pour spawn ${purchaseMode === "soldier" ? "soldat" : "archer"} : ${x},${y}` },
+          });
+          return;
+        }
 
-      if (currentRoomId) {
-        socket.emit("spawnWorker", {
-          roomId: currentRoomId,
-          player: purchasePlayer,
-          x,
-          y,
+        applyAction({
+          type: "SPAWN_UNIT",
+          player: localPlayer,
+          payload: { player: purchasePlayer, unitType: purchaseMode, x, y },
         });
+        return;
       }
-      return;
     }
 
     if (!selectedUnit) {
-      dispatch({ type: "SET_DEBUG_TEXT", payload: { text: `Aucune unité sélectionnée. Case ${x},${y}` } });
+      applyAction({ type: "SET_DEBUG_TEXT", payload: { text: `Aucune unité sélectionnée. Case ${x},${y}` } });
       return;
     }
 
     const selectionError = getUnitSelectionError(selectedUnit, phase, activePlayer, phaseActivatedUnitIds);
     if (selectionError) {
-      dispatch({ type: "CLEAR_SELECTION", payload: { debugText: selectionError } });
+      applyAction({ type: "CLEAR_SELECTION", payload: { debugText: selectionError } });
       return;
     }
 
     if (canMoveTo(reachableCells, x, y)) {
-      dispatch({
+      applyAction({
         type: "MOVE_UNIT",
         player: localPlayer,
         payload: { unitId: selectedUnit.id, x, y },
       });
-
-      if (currentRoomId) {
-        socket.emit("moveUnit", {
-          roomId: currentRoomId,
-          player: localPlayer,
-          unitId: selectedUnit.id,
-          x,
-          y,
-        });
-      }
       return;
     }
 
-    dispatch({ type: "SET_DEBUG_TEXT", payload: { text: `Case non atteignable : ${x},${y}` } });
+    applyAction({ type: "SET_DEBUG_TEXT", payload: { text: `Case non atteignable : ${x},${y}` } });
   }
 
   function handleMainAction() {
-    const canActInRoom = !currentRoomId || !localPlayer || !activePlayer || localPlayer === activePlayer || ["buy", "production", "science", "military_resolve"].includes(phase);
+    const canActInRoom =
+      !currentRoomId ||
+      !localPlayer ||
+      !activePlayer ||
+      localPlayer === activePlayer ||
+      ["buy", "production", "science", "military_resolve"].includes(phase);
 
     if (!canActInRoom) {
-      dispatch({ type: "SET_DEBUG_TEXT", payload: { text: `Action refusée : ce n'est pas le tour de J${localPlayer}.` } });
+      applyAction({ type: "SET_DEBUG_TEXT", payload: { text: `Action refusée : ce n'est pas le tour de J${localPlayer}.` } });
       return;
     }
 
     if (phase === "military_move") {
-      dispatch({ type: "PASS_MILITARY_TURN", player: localPlayer });
-
-      if (currentRoomId) {
-        socket.emit("passMilitaryTurn", {
-          roomId: currentRoomId,
-          player: localPlayer,
-        });
-      }
+      applyAction({ type: "PASS_MILITARY_TURN", player: localPlayer });
       return;
     }
 
-    if (currentRoomId) {
-      socket.emit("nextPhase", { roomId: currentRoomId });
-      return;
-    }
-
-    dispatch({ type: "NEXT_PHASE" });
+    applyAction({ type: "NEXT_PHASE", player: localPlayer });
   }
 
   function handleResolveMilitary() {
-    dispatch({ type: "RESOLVE_MILITARY", player: localPlayer });
+    applyAction({ type: "RESOLVE_MILITARY", player: localPlayer });
   }
 
   function handleProduce() {
-    if (currentRoomId) {
-      socket.emit("produceResources", {
-        roomId: currentRoomId,
-      });
-      return;
-    }
+    applyAction({ type: "PRODUCE_RESOURCES", player: localPlayer });
+  }
 
-    dispatch({ type: "PRODUCE_RESOURCES", player: localPlayer });
+  function handlePeekScience(pileType) {
+    applyAction({ type: "OPEN_SCIENCE_PEEK", player: localPlayer, payload: { pileType } });
+  }
+
+  function handleCloseSciencePeek() {
+    applyAction({ type: "CLOSE_SCIENCE_PEEK", player: localPlayer });
   }
 
   function handleResetGame() {
+    if (currentRoomId) {
+      socket.emit("errorMessage", "Le reset multi n'est pas branché dans cette version. Quitte la room ou recharge les deux clients si besoin.");
+      return;
+    }
+
     dispatch({ type: "RESET_GAME" });
     setShowPressure(true);
   }
@@ -1386,14 +1306,14 @@ export default function App() {
       >
         <div style={{ padding: 16, display: "flex", flexDirection: "column", minHeight: 0, gap: 16, overflowY: "auto" }}>
           <Sidebar
-  title="Joueur 1"
-  resources={resources.player1}
-  housingUsed={player1HousingUsed}
-  housingCapacity={player1HousingCapacity}
-  points={points.player1}
-  production={productionPreview.player1}
-  science={sciencePreview.player1}
->
+            title="Joueur 1"
+            resources={resources.player1}
+            housingUsed={player1HousingUsed}
+            housingCapacity={player1HousingCapacity}
+            points={points.player1}
+            production={productionPreview.player1}
+            science={sciencePreview.player1}
+          >
             <HandPanel
               player={1}
               cards={cards.player1}
@@ -1402,7 +1322,7 @@ export default function App() {
               selectedCard={selectedCard}
               pendingHousingSacrificePlayers={pendingHousingSacrificePlayers}
               isActivePhase={phase === "player_1"}
-              onSelectCard={(cardKey) => dispatch({ type: "SELECT_CARD", player: localPlayer, payload: { player: 1, cardKey } })}
+              onSelectCard={(cardKey) => handleSelectCard(1, cardKey)}
             />
           </Sidebar>
 
@@ -1441,7 +1361,7 @@ export default function App() {
             }}
           >
             <ActionButton
-              onClick={() => dispatch({ type: "CLEAR_SELECTION", payload: { debugText: "Sélection retirée." } })}
+              onClick={() => applyAction({ type: "CLEAR_SELECTION", payload: { debugText: "Sélection retirée." } })}
               disabled={!selectedUnitId && !selectedCardKey && !purchaseMode}
             >
               Retirer la sélection
@@ -1461,16 +1381,43 @@ export default function App() {
             <ActionButton onClick={handleResetGame}>Nouvelle partie</ActionButton>
           </div>
 
-
           {phase === "buy" ? (
             <PurchasePanel
               resources={resources}
               purchaseMode={purchaseMode}
               purchasePlayer={purchasePlayer}
-              dispatch={dispatch}
+              onSetPurchaseMode={handleSetPurchaseMode}
               activeEventCard={activeEventCard}
-              localPlayer={localPlayer}
             />
+          ) : null}
+
+          {selectedUnit && (selectedUnit.type === "archer" || selectedUnit.type === "siege") ? (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 980,
+                background: "#111827",
+                border: "1px solid rgba(96, 165, 250, 0.35)",
+                borderRadius: 14,
+                padding: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>
+                Orientation — {selectedUnit.type === "archer" ? "Archer" : "Siège"}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.78 }}>
+                Direction actuelle : {selectedUnit.direction ?? "aucune"}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionButton onClick={() => handleSetSelectedUnitDirection("up")}>↑ Haut</ActionButton>
+                <ActionButton onClick={() => handleSetSelectedUnitDirection("right")}>→ Droite</ActionButton>
+                <ActionButton onClick={() => handleSetSelectedUnitDirection("down")}>↓ Bas</ActionButton>
+                <ActionButton onClick={() => handleSetSelectedUnitDirection("left")}>← Gauche</ActionButton>
+              </div>
+            </div>
           ) : null}
 
           <div style={{ width: "100%", maxWidth: 980, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
@@ -1486,20 +1433,8 @@ export default function App() {
             units={units}
             economySelection={economySelection}
             economyChoiceLocked={economyChoiceLocked}
-            dispatch={(action) => {
-              if (action.type === "SELECT_ECONOMY_MARKET") {
-                handleSelectEconomyMarket(action.payload.player, action.payload.marketType);
-                return;
-              }
-
-              if (action.type === "CONVERT_RESOURCES") {
-                handleConvertResources(action.payload.player, action.payload.resource, action.payload.lots);
-                return;
-              }
-
-              dispatch(action);
-            }}
-            localPlayer={localPlayer}
+            onSelectEconomyMarket={handleSelectEconomyMarket}
+            onConvertResources={handleConvertResources}
           />
 
           <ScienceCompactPanel
@@ -1507,8 +1442,8 @@ export default function App() {
             buildings={buildings}
             units={units}
             scienceActionUsedThisPhase={scienceActionUsedThisPhase}
-            onPeekPoints={() => dispatch({ type: "OPEN_SCIENCE_PEEK", player: localPlayer, payload: { pileType: "points" } })}
-            onPeekEvent={() => dispatch({ type: "OPEN_SCIENCE_PEEK", player: localPlayer, payload: { pileType: "event" } })}
+            onPeekPoints={() => handlePeekScience("points")}
+            onPeekEvent={() => handlePeekScience("event")}
           />
 
           <div
@@ -1532,7 +1467,7 @@ export default function App() {
               pressureMap={pressureMap}
               showPressure={showPressure}
               placementCells={placementCells}
-              spawnCells={workerSpawnCells}
+              spawnCells={spawnCells}
               onCellClick={handleCellClick}
               onUnitClick={handleUnitClick}
             />
@@ -1541,14 +1476,14 @@ export default function App() {
 
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16, justifyContent: "flex-start", overflowY: "auto" }}>
           <Sidebar
-  title="Joueur 2"
-  resources={resources.player2}
-  housingUsed={player2HousingUsed}
-  housingCapacity={player2HousingCapacity}
-  points={points.player2}
-  production={productionPreview.player2}
-  science={sciencePreview.player2}
->
+            title="Joueur 2"
+            resources={resources.player2}
+            housingUsed={player2HousingUsed}
+            housingCapacity={player2HousingCapacity}
+            points={points.player2}
+            production={productionPreview.player2}
+            science={sciencePreview.player2}
+          >
             <HandPanel
               player={2}
               cards={cards.player2}
@@ -1557,16 +1492,13 @@ export default function App() {
               selectedCard={selectedCard}
               pendingHousingSacrificePlayers={pendingHousingSacrificePlayers}
               isActivePhase={phase === "player_2"}
-              onSelectCard={(cardKey) => dispatch({ type: "SELECT_CARD", player: localPlayer, payload: { player: 2, cardKey } })}
+              onSelectCard={(cardKey) => handleSelectCard(2, cardKey)}
             />
           </Sidebar>
         </div>
       </div>
 
-      <SciencePeekModal
-        sciencePeek={sciencePeek}
-        onClose={() => dispatch({ type: "CLOSE_SCIENCE_PEEK" })}
-      />
+      <SciencePeekModal sciencePeek={sciencePeek} onClose={handleCloseSciencePeek} />
     </div>
   );
 }

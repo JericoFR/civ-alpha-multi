@@ -8,12 +8,23 @@ export const UNIT_DEFS = {
   },
   soldier: {
     key: "soldier",
-    name: "Soldat",
+    name: "Soldat cac",
     icon: "⚔️",
     movePoints: 2,
-    cost: { food: 0, wood: 0, stone: 0, metal: 0 },
+    cost: { food: 2, gold: 1 },
+  },
+  archer: {
+    key: "archer",
+    name: "Archer",
+    icon: "🏹",
+    movePoints: 2,
+    cost: { food: 1, gold: 2 },
   },
 };
+
+export function getDefaultUnitDirection(player) {
+  return player === 1 ? "down" : "up";
+}
 
 export const INITIAL_UNITS = [
   { id: "p1-worker", player: 1, type: "worker", x: 6, y: 1 },

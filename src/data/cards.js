@@ -5,6 +5,9 @@ export const CARD_DEFS = {
     era: 1,
     category: "building",
     subCategory: "housing",
+    civilization: null,
+    tags: ["building", "housing"],
+    buildPoints: 1,
     cost: { gold: 3 },
     text:
       "+3 logements. Les ouvriers et unités militaires occupent chacun 1 logement. En feu : ne protège plus et ne fournit plus de logement.",
@@ -24,6 +27,9 @@ export const CARD_DEFS = {
     era: 1,
     category: "building",
     subCategory: "production",
+    civilization: null,
+    tags: ["building", "production", "food"],
+    buildPoints: 1,
     cost: {},
     text: "+2 🌾 de base. +1 🌾 pour chaque citoyen actif.",
     placement: {
@@ -42,6 +48,9 @@ export const CARD_DEFS = {
     era: 1,
     category: "building",
     subCategory: "production",
+    civilization: null,
+    tags: ["building", "production", "gold"],
+    buildPoints: 1,
     cost: {},
     text: "+2 💰 de base. +1 💰 pour chaque citoyen actif.",
     placement: {
@@ -60,6 +69,9 @@ export const CARD_DEFS = {
     era: 1,
     category: "building",
     subCategory: "military",
+    civilization: null,
+    tags: ["building", "military"],
+    buildPoints: 1,
     cost: { gold: 3 },
     text: "Permet de recruter Soldat et Archer si un ouvrier est actif dans ce bâtiment.",
     placement: {
@@ -72,12 +84,36 @@ export const CARD_DEFS = {
     createsBuildingType: "barracks_1",
   },
 
+  barracks_fortified: {
+    key: "barracks_fortified",
+    name: "Caserne fortifiée",
+    era: 2,
+    category: "building",
+    subCategory: "military",
+    civilization: null,
+    tags: ["building", "military"],
+    buildPoints: 2,
+    cost: { gold: 6 },
+    text: "Permet de recruter cavalerie et siège si un ouvrier est actif dans ce bâtiment.",
+    placement: {
+      mode: "green_pair",
+      size: 2,
+      allowHorizontal: true,
+      allowVertical: true,
+      ownerOnly: true,
+    },
+    createsBuildingType: "barracks_2",
+  },
+
   market: {
     key: "market",
     name: "Marché",
     era: 1,
     category: "building",
     subCategory: "economy",
+    civilization: null,
+    tags: ["building", "economy"],
+    buildPoints: 1,
     cost: { gold: 3 },
     text: "5 ressources identiques → 1 PV pendant la phase économie. Ouvrier actif requis.",
     placement: {
@@ -96,6 +132,9 @@ export const CARD_DEFS = {
     era: 1,
     category: "building",
     subCategory: "science",
+    civilization: null,
+    tags: ["building", "science"],
+    buildPoints: 1,
     cost: { gold: 3 },
     text:
       "Produit 1 science par tour par citoyen actif. À la phase Science, si ta science est strictement supérieure, tu peux regarder la prochaine carte Points ou Événement.",
@@ -111,6 +150,20 @@ export const CARD_DEFS = {
 };
 
 export const INITIAL_HANDS = {
-  player1: ["house", "field", "gold_mine", "barracks_1", "market", "school"],
-  player2: ["house", "field", "gold_mine", "barracks_1", "market", "school"],
+  player1: [
+    "house",
+    "field",
+    "gold_mine",
+    "barracks_1",
+    "market",
+    "school",
+  ],
+  player2: [
+    "house",
+    "field",
+    "gold_mine",
+    "barracks_1",
+    "market",
+    "school",
+  ],
 };

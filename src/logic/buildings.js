@@ -1,5 +1,6 @@
-import { BOARD } from "../data/board";
-import { getBuildingDef } from "../data/buildings";
+import { BOARD } from "../data/board.js";
+import { getBuildingDef } from "../data/buildings.js";
+import { isMilitaryUnit } from "./movement.js";
 
 export function normalizeBuildingCells(building) {
   if (Array.isArray(building.cells) && building.cells.length > 0) {
@@ -136,6 +137,27 @@ export function isPlacementInList(placements, x, y) {
   return placements.some((placement) => placement.x === x && placement.y === y);
 }
 
+function getOperationalBuildingCells(building) {
+  if (building.isBurning || building.isActive === false) return [];
+  return normalizeBuildingCells(building);
+}
+
+export function getAlliedWorkersInsideBuilding(building, units) {
+  const cells = getOperationalBuildingCells(building);
+  if (cells.length === 0) return [];
+
+  return units.filter(
+    (unit) =>
+      unit.player === building.player &&
+      unit.type === "worker" &&
+      cells.some((cell) => cell.x === unit.x && cell.y === unit.y)
+  );
+}
+
+export function hasActiveWorkerInBuilding(building, units) {
+  return getAlliedWorkersInsideBuilding(building, units).length > 0;
+}
+
 export function getValidWorkerSpawnCells(buildings, units, player) {
   const valid = [];
 
@@ -157,6 +179,50 @@ export function getValidWorkerSpawnCells(buildings, units, player) {
           unit.player !== player
       );
       if (hasEnemy) continue;
+      valid.push({ x: cell.x, y: cell.y });
+    }
+  }
+
+  return valid;
+}
+
+export function getValidMilitarySpawnCells(buildings, units, player, unitType) {
+  const valid = [];
+
+  for (const building of buildings) {
+    if (building.player !== player) continue;
+    if (building.isBurning || building.isActive === false) continue;
+
+    const isBarracks1 = building.type === "barracks_1";
+    const isBarracks2 = building.type === "barracks_2";
+
+    const requiresBarracks1 = unitType === "soldier" || unitType === "archer";
+    const requiresBarracks2 = unitType === "cavalry" || unitType === "siege";
+
+    if (requiresBarracks1 && !isBarracks1 && !isBarracks2) continue;
+    if (requiresBarracks2 && !isBarracks2) continue;
+    if (!hasActiveWorkerInBuilding(building, units)) continue;
+
+    const cells = normalizeBuildingCells(building);
+
+    for (const cell of cells) {
+      const hasEnemy = units.some(
+        (unit) =>
+          unit.x === cell.x &&
+          unit.y === cell.y &&
+          unit.player !== player
+      );
+      if (hasEnemy) continue;
+
+      const hasAlliedMilitary = units.some(
+        (unit) =>
+          unit.x === cell.x &&
+          unit.y === cell.y &&
+          unit.player === player &&
+          isMilitaryUnit(unit)
+      );
+      if (hasAlliedMilitary) continue;
+
       valid.push({ x: cell.x, y: cell.y });
     }
   }

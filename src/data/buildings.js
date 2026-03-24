@@ -1,3 +1,5 @@
+
+
 export const BUILDING_DEFS = {
   townhall: {
     key: "townhall",
@@ -26,14 +28,14 @@ export const BUILDING_DEFS = {
   },
 
   production_gold: {
-  key: "production_gold",
-  name: "Mine d’or",
-  resource: "gold",
-  productionBase: 2,
-  productionWorkerBonus: 1,
-  cost: {},
-  height: 2,
-},
+    key: "production_gold",
+    name: "Mine d’or",
+    resource: "gold",
+    productionBase: 2,
+    productionWorkerBonus: 1,
+    cost: {},
+    height: 2,
+  },
 
   barracks_1: {
     key: "barracks_1",
@@ -76,6 +78,25 @@ export function getBuildingDef(buildingOrType) {
   return null;
 }
 
+export function normalizeBuildingCells(building) {
+  if (!building) return [];
+
+  const size = building.size ?? 2;
+  const orientation = building.orientation ?? "vertical";
+
+  if (orientation === "horizontal") {
+    return Array.from({ length: size }, (_, index) => ({
+      x: building.x + index,
+      y: building.y,
+    }));
+  }
+
+  return Array.from({ length: size }, (_, index) => ({
+    x: building.x,
+    y: building.y + index,
+  }));
+}
+
 export const INITIAL_BUILDINGS = [
   { id: "p1-townhall", player: 1, type: "townhall", x: 6, y: 0, orientation: "vertical", size: 2 },
   { id: "p1-house", player: 1, type: "house", x: 6, y: 2, orientation: "vertical", size: 2 },
@@ -87,3 +108,148 @@ export const INITIAL_BUILDINGS = [
   { id: "p2-food", player: 2, type: "production_food", x: 4, y: 17, orientation: "vertical", size: 2 },
   { id: "p2-gold", player: 2, type: "production_gold", x: 8, y: 17, orientation: "vertical", size: 2 },
 ];
+
+function getOperationalBuildingCells(building) {
+  if (building.isBurning || building.isActive === false) return [];
+  return normalizeBuildingCells(building);
+}
+
+export function getAlliedWorkersInsideBuilding(building, units) {
+  const cells = getOperationalBuildingCells(building);
+  if (cells.length === 0) return [];
+
+  return units.filter(
+    (unit) =>
+      unit.player === building.player &&
+      unit.type === "worker" &&
+      cells.some((cell) => cell.x === unit.x && cell.y === unit.y)
+  );
+}
+
+export function hasActiveWorkerInBuilding(building, units) {
+  return getAlliedWorkersInsideBuilding(building, units).length > 0;
+}
+
+export function getValidWorkerSpawnCells(buildings, units, player) {
+  const valid = [];
+
+  for (const building of buildings) {
+    if (building.player !== player) continue;
+    if (building.isBurning || building.isActive === false) continue;
+    if (building.type !== "townhall" && building.type !== "house") continue;
+
+    const cells = normalizeBuildingCells(building);
+
+    for (const cell of cells) {
+      const hasEnemy = units.some(
+        (unit) => unit.x === cell.x && unit.y === cell.y && unit.player !== player
+      );
+      if (hasEnemy) continue;
+
+      valid.push({ x: cell.x, y: cell.y });
+    }
+  }
+
+  return valid;
+}
+
+export function getValidMilitarySpawnCells(buildings, units, player, unitType) {
+  const valid = [];
+
+  for (const building of buildings) {
+    if (building.player !== player) continue;
+    if (building.isBurning || building.isActive === false) continue;
+
+    const isBarracks1 = building.type === "barracks_1";
+    const isBarracks2 = building.type === "barracks_2";
+
+    const requiresBarracks1 = unitType === "soldier" || unitType === "archer";
+    const requiresBarracks2 = unitType === "cavalry" || unitType === "siege";
+
+    if (requiresBarracks1 && !isBarracks1 && !isBarracks2) continue;
+    if (requiresBarracks2 && !isBarracks2) continue;
+    if (!hasActiveWorkerInBuilding(building, units)) continue;
+
+    const cells = normalizeBuildingCells(building);
+
+    for (const cell of cells) {
+      const hasEnemy = units.some(
+        (unit) => unit.x === cell.x && unit.y === cell.y && unit.player !== player
+      );
+      if (hasEnemy) continue;
+
+      const hasAlliedMilitary = units.some(
+        (unit) =>
+          unit.x === cell.x &&
+          unit.y === cell.y &&
+          unit.player === player &&
+          isMilitaryUnit(unit)
+      );
+      if (hasAlliedMilitary) continue;
+
+      valid.push({ x: cell.x, y: cell.y });
+    }
+  }
+
+  return valid;
+}
+
+export function getValidBuildingPlacements(
+  buildings,
+  player,
+  { allowHorizontal = true, allowVertical = true, size = 2 } = {}
+) {
+  const occupied = new Set(
+    buildings.flatMap((building) =>
+      normalizeBuildingCells(building).map((cell) => `${cell.x},${cell.y}`)
+    )
+  );
+
+  const slots = [
+    // J1
+    { x: 2, y: 2, player: 1 },
+    { x: 4, y: 2, player: 1 },
+    { x: 8, y: 2, player: 1 },
+    { x: 10, y: 2, player: 1 },
+    { x: 2, y: 4, player: 1 },
+    { x: 10, y: 4, player: 1 },
+
+    // J2
+    { x: 2, y: 13, player: 2 },
+    { x: 4, y: 13, player: 2 },
+    { x: 8, y: 13, player: 2 },
+    { x: 10, y: 13, player: 2 },
+    { x: 2, y: 15, player: 2 },
+    { x: 10, y: 15, player: 2 },
+  ];
+
+  const results = [];
+
+  for (const slot of slots) {
+    if (slot.player !== player) continue;
+
+    if (allowVertical) {
+      const cells = Array.from({ length: size }, (_, index) => ({
+        x: slot.x,
+        y: slot.y + index,
+      }));
+
+      if (cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`))) {
+        results.push({ x: slot.x, y: slot.y, orientation: "vertical" });
+      }
+    }
+
+    if (allowHorizontal) {
+      const cells = Array.from({ length: size }, (_, index) => ({
+        x: slot.x + index,
+        y: slot.y,
+      }));
+
+      if (cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`))) {
+        results.push({ x: slot.x, y: slot.y, orientation: "horizontal" });
+      }
+    }
+  }
+
+  return results;
+}
