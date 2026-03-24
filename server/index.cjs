@@ -35,11 +35,33 @@ function findRoomIdBySocketId(socketId) {
   return null;
 }
 
+function getRoomFromPayload(payload) {
+  const roomId = payload?.roomId?.trim?.().toUpperCase?.();
+  if (!roomId) return { roomId: null, room: null };
+
+  const room = rooms[roomId];
+  if (!room) return { roomId, room: null };
+
+  return { roomId, room };
+}
+
+function ensureSocketInRoom(socket, roomId, room) {
+  if (!room) return false;
+
+  if (!room.players.includes(socket.id)) {
+    socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
+    return false;
+  }
+
+  return true;
+}
+
 io.on("connection", (socket) => {
   console.log("Un joueur connecté :", socket.id);
 
   socket.on("createRoom", () => {
     const existingRoomId = findRoomIdBySocketId(socket.id);
+
     if (existingRoomId) {
       const existingRoom = rooms[existingRoomId];
       socket.emit("roomCreated", {
@@ -59,7 +81,7 @@ io.on("connection", (socket) => {
       players: [socket.id],
       gameState: {
         phaseIndex: 0,
-        snapshot: null,
+        eraState: null,
       },
     };
 
@@ -97,6 +119,10 @@ io.on("connection", (socket) => {
       });
 
       socket.emit("gameStateUpdate", room.gameState);
+
+      if (room.gameState.eraState) {
+        socket.emit("eraStateSync", { eraState: room.gameState.eraState });
+      }
       return;
     }
 
@@ -121,24 +147,17 @@ io.on("connection", (socket) => {
       playerNumber: room.players.indexOf(socket.id) + 1,
     });
 
-    io.to(roomId).emit("roomUpdate", {
-      roomId,
-      players: room.players,
-    });
-
     socket.emit("gameStateUpdate", room.gameState);
 
-    if (room.gameState.snapshot) {
-      socket.emit("roomStateSync", { snapshot: room.gameState.snapshot });
+    if (room.gameState.eraState) {
+      socket.emit("eraStateSync", { eraState: room.gameState.eraState });
     }
   });
 
   socket.on("nextPhase", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
-
-    const room = rooms[roomId];
-    if (!room) return;
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
     room.gameState.phaseIndex = (room.gameState.phaseIndex + 1) % TOTAL_SYNCED_PHASES;
 
@@ -147,23 +166,18 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("gameStateUpdate", room.gameState);
   });
 
- socket.on("produceResources", ({ roomId }) => {
-  if (!roomId) return;
+  socket.on("produceResources", (payload) => {
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
-  io.to(roomId).emit("produceResources");
-});
+    io.to(roomId).emit("produceResources");
+  });
 
   socket.on("moveUnit", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
-
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (!room.players.includes(socket.id)) {
-      socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
-      return;
-    }
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
     socket.to(roomId).emit("unitMoved", {
       unitId: payload.unitId,
@@ -174,16 +188,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("playCard", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
-
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (!room.players.includes(socket.id)) {
-      socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
-      return;
-    }
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
     socket.to(roomId).emit("playCard", {
       player: payload.player ?? null,
@@ -194,17 +201,22 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("spawnWorker", (payload) => {
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
+
+    socket.to(roomId).emit("spawnWorker", {
+      player: payload.player ?? null,
+      x: payload.x,
+      y: payload.y,
+    });
+  });
+
   socket.on("selectEconomyMarket", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
-
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (!room.players.includes(socket.id)) {
-      socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
-      return;
-    }
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
     socket.to(roomId).emit("economyMarketSelected", {
       player: payload.player ?? null,
@@ -213,16 +225,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("convertResources", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
-
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (!room.players.includes(socket.id)) {
-      socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
-      return;
-    }
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
     socket.to(roomId).emit("resourcesConverted", {
       player: payload.player ?? null,
@@ -233,37 +238,24 @@ io.on("connection", (socket) => {
   });
 
   socket.on("passMilitaryTurn", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
-
-    const room = rooms[roomId];
-    if (!room) return;
-
-    if (!room.players.includes(socket.id)) {
-      socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
-      return;
-    }
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
     socket.to(roomId).emit("passMilitaryTurn", {
       player: payload.player ?? null,
     });
   });
 
-  socket.on("syncRoomState", (payload) => {
-    const roomId = payload?.roomId?.trim?.().toUpperCase?.();
-    if (!roomId) return;
+  socket.on("syncEraState", (payload) => {
+    const { roomId, room } = getRoomFromPayload(payload);
+    if (!roomId || !room) return;
+    if (!ensureSocketInRoom(socket, roomId, room)) return;
 
-    const room = rooms[roomId];
-    if (!room) return;
+    room.gameState.eraState = payload.eraState ?? null;
 
-    if (!room.players.includes(socket.id)) {
-      socket.emit("errorMessage", "Action refusée : socket non membre de la room.");
-      return;
-    }
-
-    room.gameState.snapshot = payload.snapshot ?? null;
-    socket.to(roomId).emit("roomStateSync", {
-      snapshot: room.gameState.snapshot,
+    socket.to(roomId).emit("eraStateSync", {
+      eraState: room.gameState.eraState,
     });
   });
 
