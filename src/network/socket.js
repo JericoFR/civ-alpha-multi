@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 const SERVER_URL =
   window.location.hostname === "localhost"
     ? "http://localhost:3001"
-    : "https://civ-alpha.onrender.com"; // 
+    : "https://civ-alpha-multi.onrender.com"; // 
 
 export const socket = io(SERVER_URL, {
   autoConnect: false,
