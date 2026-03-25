@@ -441,7 +441,7 @@ function PurchasePanel({
             >
               <div style={{ fontWeight: 700 }}>{option.label}</div>
               <div style={{ fontSize: 12, fontWeight: 700 }}>
-  Coût : {getCostLabel(card)}
+ Coût : {option.costLabel}
   {!affordable && option.enabled && <span> · insuffisant</span>}
   {!option.enabled && <span style={{ color: "#f87171" }}> · caserne requise</span>}
 </div>
