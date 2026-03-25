@@ -330,43 +330,60 @@ function PurchasePanel({ resources, purchaseMode, purchasePlayer, onSetPurchaseM
     return player === 1 ? resources.player1 : resources.player2;
   }
 
+  function hasActiveBarracks(buildings, units, player, level) {
+  return buildings.some((b) => {
+    if (b.player !== player) return false;
+    if (b.isOnFire) return false;
+
+    if (level === 1 && b.type === "barracks") {
+      return units.some((u) => u.player === player && u.x === b.x && u.y === b.y);
+    }
+
+    if (level === 2 && b.type === "barracks_2") {
+      return units.some((u) => u.player === player && u.x === b.x && u.y === b.y);
+    }
+
+    return false;
+  });
+}
+
   const options = [
-    {
-      key: "worker",
-      label: "Ouvrier",
-      costLabel: `${workerFoodCost} 🌾`,
-      getCost: () => ({ food: workerFoodCost, gold: 0 }),
-      enabled: true,
-    },
-    {
-      key: "soldier",
-      label: "Soldat cac",
-      costLabel: "2 🌾 1 💰",
-      getCost: () => ({ food: 2, gold: 1 }),
-      enabled: true,
-    },
-    {
-      key: "archer",
-      label: "Archer",
-      costLabel: "1 🌾 2 💰",
-      getCost: () => ({ food: 1, gold: 2 }),
-      enabled: true,
-    },
-    {
-      key: "cavalry",
-      label: "Cavalier",
-      costLabel: "à venir",
-      getCost: () => ({ food: 999, gold: 999 }),
-      enabled: false,
-    },
-    {
-      key: "siege",
-      label: "Siège",
-      costLabel: "à venir",
-      getCost: () => ({ food: 999, gold: 999 }),
-      enabled: false,
-    },
-  ];
+  {
+    key: "worker",
+    label: "Ouvrier",
+    costLabel: `${workerFoodCost} 🌾`,
+    getCost: () => ({ food: workerFoodCost, gold: 0 }),
+    enabled: true,
+  },
+  {
+    key: "soldier",
+    label: "Soldat cac",
+    costLabel: "2 🌾 1 💰",
+    getCost: () => ({ food: 2, gold: 1 }),
+    enabled: hasActiveBarracks(buildings, units, player, 1),
+  },
+  {
+    key: "archer",
+    label: "Archer",
+    costLabel: "1 🌾 2 💰",
+    getCost: () => ({ food: 1, gold: 2 }),
+    enabled: hasActiveBarracks(buildings, units, player, 1),
+  },
+  {
+    key: "cavalry",
+    label: "Cavalier",
+    costLabel: "à venir",
+    getCost: () => ({ food: 999, gold: 999 }),
+    enabled: hasActiveBarracks(buildings, units, player, 2),
+  },
+  {
+    key: "siege",
+    label: "Siège",
+    costLabel: "à venir",
+    getCost: () => ({ food: 999, gold: 999 }),
+    enabled: hasActiveBarracks(buildings, units, player, 2),
+  },
+];
 
   function renderPlayerColumn(player) {
     const playerResources = getPlayerResources(player);
@@ -415,10 +432,11 @@ function PurchasePanel({ resources, purchaseMode, purchasePlayer, onSetPurchaseM
               }}
             >
               <div style={{ fontWeight: 700 }}>{option.label}</div>
-              <div style={{ fontSize: 12, opacity: 0.8 }}>
-                {option.costLabel}
-                {!affordable && option.enabled ? " · insuffisant" : ""}
-              </div>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>
+  Coût : {getCostLabel(card)}
+  {!affordable && option.enabled && <span> · insuffisant</span>}
+  {!option.enabled && <span style={{ color: "#f87171" }}> · caserne requise</span>}
+</div>
             </button>
           );
         })}
