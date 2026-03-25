@@ -343,15 +343,20 @@ function PurchasePanel({
     if (b.player !== player) return false;
     if (b.isOnFire) return false;
 
-    if (level === 1 && b.type === "barracks") {
-      return units.some((u) => u.player === player && u.x === b.x && u.y === b.y);
-    }
+    const isCorrectBarracks =
+      (level === 1 && b.type === "barracks") ||
+      (level === 2 && b.type === "barracks_2");
 
-    if (level === 2 && b.type === "barracks_2") {
-      return units.some((u) => u.player === player && u.x === b.x && u.y === b.y);
-    }
+    if (!isCorrectBarracks) return false;
 
-    return false;
+    const buildingCells = getBuildingCells(b);
+
+    return units.some(
+      (u) =>
+        u.player === player &&
+        u.type === "worker" &&
+        buildingCells.some((cell) => cell.x === u.x && cell.y === u.y)
+    );
   });
 }
 
@@ -362,34 +367,39 @@ function PurchasePanel({
     costLabel: `${workerFoodCost} 🌾`,
     getCost: () => ({ food: workerFoodCost, gold: 0 }),
     enabled: true,
+    barracksLevel: null,
   },
   {
     key: "soldier",
     label: "Soldat cac",
     costLabel: "2 🌾 1 💰",
     getCost: () => ({ food: 2, gold: 1 }),
-    enabled: hasActiveBarracks(buildings, units, player, 1),
+    enabled: true,
+    barracksLevel: 1,
   },
   {
     key: "archer",
     label: "Archer",
     costLabel: "1 🌾 2 💰",
     getCost: () => ({ food: 1, gold: 2 }),
-    enabled: hasActiveBarracks(buildings, units, player, 1),
+    enabled: true,
+    barracksLevel: 1,
   },
   {
     key: "cavalry",
     label: "Cavalier",
     costLabel: "à venir",
     getCost: () => ({ food: 999, gold: 999 }),
-    enabled: hasActiveBarracks(buildings, units, player, 2),
+    enabled: false,
+    barracksLevel: 2,
   },
   {
     key: "siege",
     label: "Siège",
     costLabel: "à venir",
     getCost: () => ({ food: 999, gold: 999 }),
-    enabled: hasActiveBarracks(buildings, units, player, 2),
+    enabled: false,
+    barracksLevel: 2,
   },
 ];
 
@@ -418,36 +428,48 @@ function PurchasePanel({
         </div>
 
         {options.map((option) => {
-          const selected = purchaseMode === option.key && purchasePlayer === player;
-          const affordable = canAfford(playerResources, option.getCost());
-          const disabled = !option.enabled || !affordable;
+  const selected = purchaseMode === option.key && purchasePlayer === player;
+  const affordable = canAfford(playerResources, option.getCost());
 
-          return (
-            <button
-              key={`${player}-${option.key}`}
-              type="button"
-              disabled={disabled}
-              onClick={() => onSetPurchaseMode(option.key, player)}
-              style={{
-                borderRadius: 12,
-                border: selected ? "2px solid rgba(34, 197, 94, 0.95)" : "1px solid rgba(255,255,255,0.12)",
-                background: disabled ? "#1f2937" : selected ? "#0f3d2e" : "#111827",
-                color: "white",
-                padding: "10px 12px",
-                textAlign: "left",
-                cursor: disabled ? "not-allowed" : "pointer",
-                opacity: disabled ? 0.45 : 1,
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>{option.label}</div>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>
- Coût : {option.costLabel}
-  {!affordable && option.enabled && <span> · insuffisant</span>}
-  {!option.enabled && <span style={{ color: "#f87171" }}> · caserne requise</span>}
-</div>
-            </button>
-          );
-        })}
+  const barracksOk =
+    option.barracksLevel == null
+      ? true
+      : hasActiveBarracks(buildings, units, player, option.barracksLevel);
+
+  const enabled = option.enabled && barracksOk;
+  const disabled = !enabled || !affordable;
+
+  return (
+    <button
+      key={`${player}-${option.key}`}
+      type="button"
+      disabled={disabled}
+      onClick={() => onSetPurchaseMode(option.key, player)}
+      style={{
+        borderRadius: 12,
+        border: selected ? "2px solid rgba(34, 197, 94, 0.95)" : "1px solid rgba(255,255,255,0.12)",
+        background: disabled ? "#1f2937" : selected ? "#0f3d2e" : "#111827",
+        color: "white",
+        padding: "10px 12px",
+        textAlign: "left",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <div style={{ fontWeight: 700 }}>{option.label}</div>
+      <div style={{ fontSize: 12, fontWeight: 700 }}>
+        Coût : {option.costLabel}
+        {!affordable && enabled && <span> · insuffisant</span>}
+        {!barracksOk && option.barracksLevel === 1 && (
+          <span style={{ color: "#f87171" }}> · caserne I requise</span>
+        )}
+        {!barracksOk && option.barracksLevel === 2 && (
+          <span style={{ color: "#f87171" }}> · caserne II requise</span>
+        )}
+      </div>
+    </button>
+  );
+})}
       </div>
     );
   }
