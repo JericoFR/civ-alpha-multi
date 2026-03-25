@@ -1332,7 +1332,7 @@ socket.on("REMATCH_ACCEPTED_WAITING", () => {
     if (!selectedUnit) return [];
     const selectionError = getUnitSelectionError(selectedUnit, phase, activePlayer, phaseActivatedUnitIds);
     if (selectionError) return [];
-    return getReachableCells(units, selectedUnit);
+    return getReachableCells(units, buildings, selectedUnit);
   }, [units, selectedUnit, phase, activePlayer, phaseActivatedUnitIds]);
 
   const currentPhase = getPhaseDefinition(phase);
@@ -1348,14 +1348,15 @@ socket.on("REMATCH_ACCEPTED_WAITING", () => {
   );
 
   const validCardPlacements = useMemo(() => {
-    if (!selectedCard || !activePlayer) return [];
-    if (selectedCard.placement?.mode !== "green_pair") return [];
-    return getValidBuildingPlacements(buildings, activePlayer, {
-      allowHorizontal: selectedCard.placement.allowHorizontal,
-      allowVertical: selectedCard.placement.allowVertical,
-      size: selectedCard.placement.size,
-    });
-  }, [selectedCard, activePlayer, buildings]);
+  if (!selectedCard || !activePlayer) return [];
+
+  return getValidBuildingPlacements(buildings, activePlayer, {
+    mode: selectedCard.placement?.mode ?? "green_pair",
+    allowHorizontal: selectedCard.placement?.allowHorizontal ?? true,
+    allowVertical: selectedCard.placement?.allowVertical ?? true,
+    size: selectedCard.placement?.size ?? 2,
+  });
+}, [selectedCard, activePlayer, buildings]);
 
   const placementCells = useMemo(
     () =>

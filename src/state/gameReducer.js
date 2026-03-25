@@ -15,7 +15,11 @@ import {
   spendCost,
 } from "../logic/economy.js";
 import { resolveMilitaryPressure } from "../logic/pressure.js";
-import { getValidMilitarySpawnCells, getValidWorkerSpawnCells } from "../logic/buildings.js";
+import {
+  getValidBuildingPlacements,
+  getValidMilitarySpawnCells,
+  getValidWorkerSpawnCells,
+} from "../logic/buildings.js";
 import { createInitialState, getPhaseDefinition, PHASES } from "./initialState.js";
 
 function getNextPhaseKey(currentPhase) {
@@ -566,10 +570,30 @@ export function gameReducer(state, action) {
         };
       }
 
-      if (!canAfford(state.resources[playerKey], card.cost)) {
+            if (!canAfford(state.resources[playerKey], card.cost)) {
         return {
           ...state,
           debugText: `Pas assez de ressources pour jouer ${card.name}.`,
+        };
+      }
+
+      const validPlacements = getValidBuildingPlacements(
+        state.buildings,
+        player,
+        card.placement ?? {}
+      );
+
+      const isValidPlacement = validPlacements.some(
+        (placement) =>
+          placement.x === x &&
+          placement.y === y &&
+          placement.orientation === orientation
+      );
+
+      if (!isValidPlacement) {
+        return {
+          ...state,
+          debugText: `Placement invalide pour ${card.name}.`,
         };
       }
 

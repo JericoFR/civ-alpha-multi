@@ -114,8 +114,21 @@ function getThreshold(unit) {
   return 2;
 }
 
+function getBuildingBurnThreshold(building, fallbackThreshold = 3) {
+  if (typeof building.burnThreshold === "number") {
+    return building.burnThreshold;
+  }
+
+  if (building.type === "palisade") {
+    return 3;
+  }
+
+  return fallbackThreshold;
+}
+
 function shouldBurn(building, pressureMap, buildingBurnThreshold = 3) {
   const cells = normalizeBuildingCells(building);
+  const threshold = getBuildingBurnThreshold(building, buildingBurnThreshold);
 
   return cells.some((cell) => {
     const enemyPressure = getEnemyPressure(
@@ -124,7 +137,7 @@ function shouldBurn(building, pressureMap, buildingBurnThreshold = 3) {
       cell.y,
       building.player
     );
-    return enemyPressure >= buildingBurnThreshold;
+    return enemyPressure >= threshold;
   });
 }
 

@@ -1,4 +1,5 @@
-
+import { BOARD } from "../data/board.js";
+import { isMilitaryUnit } from "../logic/movement.js";
 
 export const BUILDING_DEFS = {
   townhall: {
@@ -42,6 +43,15 @@ export const BUILDING_DEFS = {
     name: "Caserne I",
     cost: { gold: 3 },
     height: 2,
+  },
+
+  palisade: {
+    key: "palisade",
+    name: "Palissade",
+    cost: { gold: 1 },
+    height: 2,
+    burnThreshold: 3,
+    blocksEnemyMovement: true,
   },
 
   market: {
@@ -197,7 +207,12 @@ export function getValidMilitarySpawnCells(buildings, units, player, unitType) {
 export function getValidBuildingPlacements(
   buildings,
   player,
-  { allowHorizontal = true, allowVertical = true, size = 2 } = {}
+  {
+    mode = "green_pair",
+    allowHorizontal = true,
+    allowVertical = true,
+    size = 2,
+  } = {}
 ) {
   const occupied = new Set(
     buildings.flatMap((building) =>
@@ -205,24 +220,37 @@ export function getValidBuildingPlacements(
     )
   );
 
-  const slots = [
-    // J1
-    { x: 2, y: 2, player: 1 },
-    { x: 4, y: 2, player: 1 },
-    { x: 8, y: 2, player: 1 },
-    { x: 10, y: 2, player: 1 },
-    { x: 2, y: 4, player: 1 },
-    { x: 10, y: 4, player: 1 },
+  const slotGroups = {
+    green_pair: [
+      // J1
+      { x: 2, y: 2, player: 1 },
+      { x: 4, y: 2, player: 1 },
+      { x: 8, y: 2, player: 1 },
+      { x: 10, y: 2, player: 1 },
+      { x: 2, y: 4, player: 1 },
+      { x: 10, y: 4, player: 1 },
 
-    // J2
-    { x: 2, y: 13, player: 2 },
-    { x: 4, y: 13, player: 2 },
-    { x: 8, y: 13, player: 2 },
-    { x: 10, y: 13, player: 2 },
-    { x: 2, y: 15, player: 2 },
-    { x: 10, y: 15, player: 2 },
-  ];
+      // J2
+      { x: 2, y: 13, player: 2 },
+      { x: 4, y: 13, player: 2 },
+      { x: 8, y: 13, player: 2 },
+      { x: 10, y: 13, player: 2 },
+      { x: 2, y: 15, player: 2 },
+      { x: 10, y: 15, player: 2 },
+    ],
 
+    black_pair: [
+      // J1 defenses
+      { x: 4, y: 5, player: 1 },
+      { x: 7, y: 5, player: 1 },
+
+      // J2 defenses
+      { x: 4, y: 13, player: 2 },
+      { x: 7, y: 13, player: 2 },
+    ],
+  };
+
+  const slots = slotGroups[mode] ?? slotGroups.green_pair;
   const results = [];
 
   for (const slot of slots) {
@@ -234,7 +262,12 @@ export function getValidBuildingPlacements(
         y: slot.y + index,
       }));
 
-      if (cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`))) {
+      const allFree = cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`));
+      const allOnExpectedTerrain = cells.every(
+        (cell) => BOARD[cell.y]?.[cell.x] === (mode === "black_pair" ? "noir" : "vert")
+      );
+
+      if (allFree && allOnExpectedTerrain) {
         results.push({ x: slot.x, y: slot.y, orientation: "vertical" });
       }
     }
@@ -245,7 +278,12 @@ export function getValidBuildingPlacements(
         y: slot.y,
       }));
 
-      if (cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`))) {
+      const allFree = cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`));
+      const allOnExpectedTerrain = cells.every(
+        (cell) => BOARD[cell.y]?.[cell.x] === (mode === "black_pair" ? "noir" : "vert")
+      );
+
+      if (allFree && allOnExpectedTerrain) {
         results.push({ x: slot.x, y: slot.y, orientation: "horizontal" });
       }
     }

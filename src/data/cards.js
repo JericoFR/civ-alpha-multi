@@ -105,6 +105,28 @@ export const CARD_DEFS = {
     createsBuildingType: "barracks_2",
   },
 
+  palisade: {
+    key: "palisade",
+    name: "Palissade",
+    era: 1,
+    category: "building",
+    subCategory: "defense",
+    civilization: null,
+    tags: ["building", "defense"],
+    buildPoints: 1,
+    cost: { gold: 1 },
+    text:
+      "Bloque le déplacement des unités adverses. Peut abriter soldats et ouvriers comme un bâtiment normal. En feu : ne bloque plus et ne protège plus.",
+    placement: {
+      mode: "black_pair",
+      size: 2,
+      allowHorizontal: true,
+      allowVertical: false,
+      ownerOnly: true,
+    },
+    createsBuildingType: "palisade",
+  },
+
   market: {
     key: "market",
     name: "Marché",
@@ -155,6 +177,7 @@ export const INITIAL_HANDS = {
     "field",
     "gold_mine",
     "barracks_1",
+    "palisade",
     "market",
     "school",
   ],
@@ -163,6 +186,7 @@ export const INITIAL_HANDS = {
     "field",
     "gold_mine",
     "barracks_1",
+    "palisade",
     "market",
     "school",
   ],

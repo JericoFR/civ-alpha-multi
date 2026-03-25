@@ -47,13 +47,57 @@ export function hasAlliedMilitaryOnCell(units, selectedUnit, x, y) {
       unit.x === x &&
       unit.y === y &&
       unit.player === selectedUnit.player &&
+      unit.id !== selectedUnit.id &&
       isMilitaryUnit(unit)
   );
 }
 
-export function canUnitEndOnCell(units, selectedUnit, x, y) {
+export function normalizeBuildingCells(building) {
+  if (!building) return [];
+
+  const size = building.size ?? 2;
+  const orientation = building.orientation ?? "vertical";
+
+  if (orientation === "horizontal") {
+    return Array.from({ length: size }, (_, index) => ({
+      x: building.x + index,
+      y: building.y,
+    }));
+  }
+
+  return Array.from({ length: size }, (_, index) => ({
+    x: building.x,
+    y: building.y + index,
+  }));
+}
+
+export function isEnemyMovementBlockedByBuilding(building, selectedUnit, x, y) {
+  if (!building || !selectedUnit) return false;
+  if (building.player === selectedUnit.player) return false;
+  if (building.isBurning || building.isActive === false) return false;
+
+  // Défenses qui bloquent le déplacement ennemi
+  if (building.type !== "palisade") return false;
+
+  return normalizeBuildingCells(building).some((cell) => cell.x === x && cell.y === y);
+}
+
+export function isBlockedByEnemyDefense(buildings, selectedUnit, x, y) {
+  if (!Array.isArray(buildings) || !selectedUnit) return false;
+
+  return buildings.some((building) =>
+    isEnemyMovementBlockedByBuilding(building, selectedUnit, x, y)
+  );
+}
+
+export function canUnitEndOnCell(units, buildings, selectedUnit, x, y) {
   // Ennemi = interdit
   if (hasEnemyUnit(units, selectedUnit, x, y)) {
+    return false;
+  }
+
+  // Défense ennemie active = interdit
+  if (isBlockedByEnemyDefense(buildings, selectedUnit, x, y)) {
     return false;
   }
 
@@ -63,11 +107,10 @@ export function canUnitEndOnCell(units, selectedUnit, x, y) {
     return false;
   }
 
-  // Sinon c'est autorisé
   return true;
 }
 
-export function getReachableCells(units, selectedUnit) {
+export function getReachableCells(units, buildings, selectedUnit) {
   if (!selectedUnit) return [];
 
   const def = UNIT_DEFS[selectedUnit.type];
@@ -109,14 +152,16 @@ export function getReachableCells(units, selectedUnit) {
         continue;
       }
 
+      // Palissade ennemie active = bloque totalement passage + arrivée
+      if (isBlockedByEnemyDefense(buildings, selectedUnit, next.x, next.y)) {
+        continue;
+      }
+
       visited.set(key, nextDist);
 
-      // Traversée autorisée si pas d'ennemi
       queue.push({ x: next.x, y: next.y, dist: nextDist });
 
-      // Destination autorisée selon les règles de stack
-      if (canUnitEndOnCell(units, selectedUnit, next.x, next.y)) {
-        // éviter d'ajouter la case de départ
+      if (canUnitEndOnCell(units, buildings, selectedUnit, next.x, next.y)) {
         if (!(next.x === selectedUnit.x && next.y === selectedUnit.y)) {
           results.push({ x: next.x, y: next.y });
         }

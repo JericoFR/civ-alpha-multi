@@ -29,6 +29,7 @@ function getBuildingLabel(type) {
   if (type === "barracks_2") return "🛡️";
   if (type === "market") return "💰";
   if (type === "school") return "🎓";
+  if (type === "palisade") return "🛡️";
   return "";
 }
 
@@ -72,6 +73,14 @@ function getBuildingColor(type) {
       shadow: "rgba(239, 68, 68, 0.4)",
     };
   }
+
+  if (type === "palisade") {
+  return {
+    fill: "linear-gradient(180deg, #92400e 0%, #78350f 100%)",
+    border: "#fbbf24",
+    shadow: "rgba(120, 53, 15, 0.5)",
+  };
+}
 
   return {
     fill: "linear-gradient(180deg, #facc15 0%, #eab308 100%)",
