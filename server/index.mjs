@@ -81,8 +81,8 @@ function isValidSetupCell(buildings, player, x, y) {
   );
 }
 
-function buildGameStateFromSetup(setup) {
-  const gameState = createInitialState();
+function buildGameStateFromSetup(setup, customDecks = null) {
+  const gameState = createInitialState(customDecks);
   const placements = setup.placements;
 
   gameState.units = [
@@ -120,6 +120,10 @@ function resetRoomToLobby(room) {
   room.state = null;
   room.setup = createEmptySetup();
   room.rematchRequests = {};
+  room.decks = room.decks ?? {
+    player1: null,
+    player2: null,
+  };
 }
 
 io.on("connection", (socket) => {
@@ -129,12 +133,16 @@ io.on("connection", (socket) => {
     const roomId = generateRoomId();
 
     rooms[roomId] = {
-      players: [socket.id],
-      phase: "lobby",
-      state: null,
-      setup: createEmptySetup(),
-      rematchRequests: {},
-    };
+  players: [socket.id],
+  phase: "lobby",
+  state: null,
+  setup: createEmptySetup(),
+  rematchRequests: {},
+  decks: {
+    player1: null,
+    player2: null,
+  },
+};
 
     socket.join(roomId);
 
@@ -162,6 +170,13 @@ io.on("connection", (socket) => {
       room.rematchRequests = {};
     }
 
+    if (!room.decks) {
+  room.decks = {
+    player1: null,
+    player2: null,
+  };
+}
+
     if (room.players.length >= 2) {
       socket.emit("errorMessage", "Room pleine.");
       return;
@@ -188,6 +203,40 @@ io.on("connection", (socket) => {
     console.log(`🔵 ${socket.id} a rejoint ${roomId}`);
   });
 
+  
+    socket.on("SET_PLAYER_DECK", ({ roomId, deck }) => {
+    const room = getRoom(roomId);
+
+    if (!room) {
+      socket.emit("errorMessage", "Room introuvable.");
+      return;
+    }
+
+    const playerIndex = room.players.indexOf(socket.id);
+
+    if (playerIndex === -1) {
+      socket.emit("errorMessage", "Tu n'appartiens pas à cette room.");
+      return;
+    }
+
+    if (!room.decks) {
+      room.decks = {
+        player1: null,
+        player2: null,
+      };
+    }
+
+    const playerKey = playerIndex === 0 ? "player1" : "player2";
+
+    room.decks[playerKey] = deck;
+
+    io.to(roomId).emit("ROOM_DECK_UPDATE", {
+      decks: room.decks,
+    });
+
+    console.log(`📦 Deck reçu pour ${playerKey} dans la room ${roomId}`);
+  });
+  
   socket.on("START_SETUP", ({ roomId }) => {
     const room = getRoom(roomId);
 
@@ -279,7 +328,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("SETUP_UPDATE", room.setup);
 
     if (room.setup.step >= 4) {
-      room.state = buildGameStateFromSetup(room.setup);
+      room.state = buildGameStateFromSetup(room.setup, room.decks);
       room.phase = "game";
       room.rematchRequests = {};
 

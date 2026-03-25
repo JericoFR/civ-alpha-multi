@@ -19,6 +19,36 @@ export function getPhaseDefinition(phaseKey) {
   return PHASES.find((phase) => phase.key === phaseKey) ?? PHASES[0];
 }
 
+function normalizeDeckCards(deckLike) {
+  if (!deckLike) return [];
+
+  // cas preset explicite : deck de base
+  if (typeof deckLike === "object" && deckLike.preset === "base") {
+    return structuredClone(INITIAL_HANDS.player1 ?? []);
+  }
+
+  // cas 1 : déjà un tableau ["house", "field", ...]
+  if (Array.isArray(deckLike)) {
+    return deckLike.filter((cardKey) => typeof cardKey === "string" && cardKey.trim().length > 0);
+  }
+
+  // cas 2 : objet deck builder { name, cards: { house: 2, field: 3 } }
+  if (typeof deckLike === "object" && deckLike.cards && typeof deckLike.cards === "object") {
+    const expanded = [];
+
+    for (const [cardKey, qty] of Object.entries(deckLike.cards)) {
+      const count = Math.max(0, Math.floor(Number(qty) || 0));
+      for (let i = 0; i < count; i += 1) {
+        expanded.push(cardKey);
+      }
+    }
+
+    return expanded;
+  }
+
+  return [];
+}
+
 function ensureStartingHands(hands) {
   const clonedHands = structuredClone(hands ?? { player1: [], player2: [] });
 
@@ -39,9 +69,23 @@ function ensureStartingHands(hands) {
   return clonedHands;
 }
 
-export function createInitialState() {
+function resolveStartingHands(customDecks = null) {
+  if (!customDecks) {
+    return ensureStartingHands(INITIAL_HANDS);
+  }
+
+  const player1Cards = normalizeDeckCards(customDecks.player1);
+  const player2Cards = normalizeDeckCards(customDecks.player2);
+
+  return {
+    player1: player1Cards,
+    player2: player2Cards,
+  };
+}
+
+export function createInitialState(customDecks = null) {
   const eraSetup = createShuffledEraDecks();
-  const startingHands = ensureStartingHands(INITIAL_HANDS);
+  const startingHands = resolveStartingHands(customDecks);
 
   return {
     turn: 1,
@@ -75,15 +119,16 @@ export function createInitialState() {
     militaryConsecutivePasses: 0,
     productionDoneThisPhase: false,
     militaryResolutionDoneThisPhase: false,
-buyPasses: {
-  player1: false,
-  player2: false,
-},
 
-economyPasses: {
-  player1: false,
-  player2: false,
-},
+    buyPasses: {
+      player1: false,
+      player2: false,
+    },
+
+    economyPasses: {
+      player1: false,
+      player2: false,
+    },
 
     resourceVersion: 0,
     pendingHousingSacrificePlayers: [],

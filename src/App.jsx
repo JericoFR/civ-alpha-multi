@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Board from "./components/Board";
 import Sidebar from "./components/Sidebar";
+import DeckBuilder from "./components/DeckBuilder";
 import { socket } from "./network/socket";
 import { CARD_DEFS } from "./data/cards";
 import {
@@ -89,8 +90,8 @@ function getSetupPreviewUnits(setupState) {
   return units;
 }
 
-function buildGameStateFromSetup(setupState) {
-  const nextState = createInitialState();
+function buildGameStateFromSetup(setupState, customDecks = null) {
+  const nextState = createInitialState(customDecks);
   const placements = setupState?.placements ?? createEmptySetupState().placements;
 
   nextState.units = [
@@ -255,7 +256,24 @@ function getCostLabel(card) {
   return bits.length > 0 ? bits.join(" ") : "gratuit";
 }
 
-function CardButton({ card, selected, disabled, affordable, onClick }) {
+function groupCardsForDisplay(cardKeys) {
+  const groupedMap = new Map();
+
+  for (const cardKey of cardKeys) {
+    if (!groupedMap.has(cardKey)) {
+      groupedMap.set(cardKey, {
+        cardKey,
+        quantity: 1,
+      });
+    } else {
+      groupedMap.get(cardKey).quantity += 1;
+    }
+  }
+
+  return Array.from(groupedMap.values());
+}
+
+function CardButton({ card, quantity = 1, selected, disabled, affordable, onClick }) {
   return (
     <button
       type="button"
@@ -271,13 +289,43 @@ function CardButton({ card, selected, disabled, affordable, onClick }) {
         color: "white",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.55 : 1,
+        position: "relative",
       }}
     >
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{card.name}</div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 4,
+        }}
+      >
+        <div style={{ fontWeight: 700 }}>{card.name}</div>
+
+        {quantity > 1 ? (
+          <div
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 999,
+              padding: "2px 8px",
+              fontSize: 12,
+              fontWeight: 800,
+              whiteSpace: "nowrap",
+            }}
+          >
+            x{quantity}
+          </div>
+        ) : null}
+      </div>
+
       <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 6 }}>
         Ère {card.era} · {card.category} · {card.subCategory}
       </div>
+
       <div style={{ fontSize: 13, opacity: 0.86, marginBottom: 8 }}>{card.text}</div>
+
       <div style={{ fontSize: 12, fontWeight: 700 }}>
         Coût : {getCostLabel(card)}
         {!affordable ? " · insuffisant" : ""}
@@ -296,6 +344,8 @@ function HandPanel({
   isActivePhase,
   onSelectCard,
 }) {
+  const groupedCards = useMemo(() => groupCardsForDisplay(cards), [cards]);
+
   return (
     <div
       style={{
@@ -314,23 +364,27 @@ function HandPanel({
         <span>Main de J{player}</span> {isActivePhase ? <span>(active)</span> : null}
         {isActivePhase && selectedCard ? <span>{` — ${selectedCard.name} sélectionnée`}</span> : null}
       </div>
+
       <div style={{ fontSize: 13, opacity: 0.8 }}>
         <span>Déplace tes ouvriers puis pose une carte bâtiment. Le coût est retiré immédiatement.</span>
         {pendingHousingSacrificePlayers.length > 0 ? (
           <span>{` Sacrifice requis pour J${pendingHousingSacrificePlayers[0]}.`}</span>
         ) : null}
       </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {cards.length === 0 ? (
+        {groupedCards.length === 0 ? (
           <div style={{ opacity: 0.7 }}>Aucune carte en main.</div>
         ) : (
-          cards.map((cardKey, index) => {
+          groupedCards.map(({ cardKey, quantity }) => {
             const card = CARD_DEFS[cardKey];
             const affordable = canAfford(resources, card.cost);
+
             return (
               <CardButton
-                key={`${cardKey}-${index}`}
+                key={cardKey}
                 card={card}
+                quantity={quantity}
                 selected={isActivePhase && selectedCardKey === cardKey}
                 disabled={!isActivePhase || pendingHousingSacrificePlayers.length > 0 || !affordable}
                 affordable={affordable}
@@ -912,7 +966,7 @@ function RoomPanel({
   );
 }
 
-function HomePanel({ onStartSolo, onStartMulti }) {
+function HomePanel({ onStartSolo, onStartMulti, onOpenDeckBuilder }) {
   return (
     <div
       style={{
@@ -943,9 +997,10 @@ function HomePanel({ onStartSolo, onStartMulti }) {
           Choisis ton mode. En multi : room → lobby → setup → partie. En solo : setup local puis partie.
         </div>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <ActionButton onClick={onStartSolo}>Solo</ActionButton>
-          <ActionButton onClick={onStartMulti}>Multi</ActionButton>
-        </div>
+  <ActionButton onClick={onStartSolo}>Solo</ActionButton>
+  <ActionButton onClick={onStartMulti}>Multi</ActionButton>
+  <ActionButton onClick={() => onOpenDeckBuilder?.()}>Deck Builder</ActionButton>
+</div>
       </div>
     </div>
   );
@@ -1079,9 +1134,30 @@ export default function App() {
   const [rematchPending, setRematchPending] = useState(false);
   const [rematchRequest, setRematchRequest] = useState(null);
   const [privateSciencePeek, setPrivateSciencePeek] = useState(null);
+  const [soloDeck, setSoloDeck] = useState(null);
+  const [roomDecks, setRoomDecks] = useState({
+    player1: null,
+    player2: null,
+      });
   const currentRoomIdRef = useRef("");
   const localPlayerRef = useRef(null);
 
+    function loadStoredSoloDeck() {
+    try {
+      const raw = localStorage.getItem("civ-alpha-selected-deck");
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      if (!parsed.cards || typeof parsed.cards !== "object") return null;
+
+      return parsed;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+  
   useEffect(() => {
     currentRoomIdRef.current = currentRoomId;
   }, [currentRoomId]);
@@ -1101,6 +1177,13 @@ export default function App() {
 
     dispatch(action);
   }
+
+    useEffect(() => {
+    const storedDeck = loadStoredSoloDeck();
+    if (storedDeck) {
+      setSoloDeck(storedDeck);
+    }
+  }, []);
 
   useEffect(() => {
     function handleConnect() {
@@ -1149,6 +1232,8 @@ export default function App() {
 
 function handleRoomCreated(data) {
   hydrateFromRoom(data, `Room créée : ${data.roomId} | Tu es J${data.playerNumber ?? 1}`);
+  setRoomDecks({ player1: null, player2: null });
+  
 }
 
 function handleRoomJoined(data) {
@@ -1158,6 +1243,8 @@ function handleRoomJoined(data) {
       data.playerNumber ? ` | Tu es J${data.playerNumber}` : ""
     }`
   );
+setRoomDecks({ player1: null, player2: null });
+  
 }
 
 function handleSetupUpdate(serverSetup) {
@@ -1233,17 +1320,21 @@ function handleRematchDeclined(payload) {
     socket.on("roomJoined", handleRoomJoined);
     socket.on("roomUpdate", handleRoomUpdate);
     socket.on("GAME_STATE", handleGameState);
-socket.on("errorMessage", handleErrorMessage);
-socket.on("SCIENCE_PEEK_RESULT", handleSciencePeekResult);
-socket.on("SETUP_UPDATE", handleSetupUpdate);
+    socket.on("errorMessage", handleErrorMessage);
+    socket.on("SCIENCE_PEEK_RESULT", handleSciencePeekResult);
+    socket.on("SETUP_UPDATE", handleSetupUpdate);
     socket.on("GAME_START", handleGameStart);
     socket.on("RETURN_TO_LOBBY", handleReturnToLobby);
     socket.on("REMATCH_REQUESTED", handleRematchRequest);
-socket.on("REMATCH_PENDING", () => {
-  setRematchPending(true);
-  setRematchRequest(null);
-  setRoomMessage("Demande de revanche envoyée. En attente de la réponse adverse.");
-});
+    socket.on("REMATCH_PENDING", () => {
+      setRematchPending(true);
+      setRematchRequest(null);
+      setRoomMessage("Demande de revanche envoyée. En attente de la réponse adverse.");
+      });
+    socket.on("ROOM_DECK_UPDATE", ({ decks }) => {
+      setRoomDecks(decks ?? { player1: null, player2: null });
+        console.log("📚 Decks room mis à jour :", decks);
+      });
 
 socket.on("REMATCH_DECLINED", (payload) => {
   setRematchPending(false);
@@ -1274,6 +1365,7 @@ socket.on("REMATCH_ACCEPTED_WAITING", () => {
       socket.off("GAME_START", handleGameStart);
       socket.off("RETURN_TO_LOBBY", handleReturnToLobby);
       socket.off("REMATCH_REQUESTED", handleRematchRequest);
+      socket.off("ROOM_DECK_UPDATE");
       socket.off("REMATCH_PENDING");
       socket.off("REMATCH_DECLINED");
       socket.off("REMATCH_ACCEPTED");
@@ -1430,13 +1522,26 @@ const setupSpawnCells = useMemo(
     socket.emit("joinRoom", cleaned);
   }
 
-  function handleStartSolo() {
+  
+
+function handleStartSolo() {
+  const storedDeck = loadStoredSoloDeck();
+  const effectiveSoloDeck = storedDeck ?? soloDeck ?? null;
+
+  if (storedDeck && !soloDeck) {
+    setSoloDeck(storedDeck);
+  }
+
   setGameMode("solo");
   setCurrentRoomId("");
   setLocalPlayer(null);
   setRoomPlayerCount(0);
   setSetupState(createEmptySetupState());
-  setRoomMessage("Mode solo — place les 4 unités de départ.");
+  setRoomMessage(
+    effectiveSoloDeck
+      ? `Mode solo — deck chargé : ${effectiveSoloDeck.name ?? "Mon deck"}`
+      : "Mode solo — deck par défaut. Place les 4 unités de départ."
+  );
   setAppPhase("setup");
 }
 
@@ -1444,6 +1549,16 @@ function handleStartMulti() {
   setGameMode("multi");
   setAppPhase("lobby");
   setRoomMessage("Crée ou rejoins une room.");
+}
+
+function handleOpenDeckBuilder() {
+  setAppPhase("deck_builder");
+}
+
+function handleUseDeckForSolo(deckPayload) {
+  setSoloDeck(deckPayload);
+  setRoomMessage(`Deck solo sélectionné : ${deckPayload?.name ?? "Mon deck"}`);
+  setAppPhase("home");
 }
 
 function handleBackToHome() {
@@ -1492,11 +1607,26 @@ function handleSetupPlacement(x, y) {
   nextSetup.step += 1;
   setSetupState(nextSetup);
 
-  if (nextSetup.step >= SETUP_STEPS.length) {
-    const nextGameState = buildGameStateFromSetup(nextSetup);
+   if (nextSetup.step >= SETUP_STEPS.length) {
+    const effectiveSoloDeck = loadStoredSoloDeck() ?? soloDeck ?? null;
+
+    const nextGameState = buildGameStateFromSetup(
+      nextSetup,
+      effectiveSoloDeck
+        ? {
+            player1: effectiveSoloDeck,
+            player2: effectiveSoloDeck,
+          }
+        : null
+    );
+
     dispatch({ type: "HYDRATE_STATE", payload: nextGameState });
     setAppPhase("game");
-    setRoomMessage("Partie locale lancée.");
+    setRoomMessage(
+      effectiveSoloDeck
+        ? `Partie locale lancée avec le deck : ${effectiveSoloDeck.name ?? "Mon deck"}`
+        : "Partie locale lancée."
+    );
   }
 }
 
@@ -1827,10 +1957,40 @@ if (phase === "economy") {
   }
 
 if (appPhase === "home") {
-  return <HomePanel onStartSolo={handleStartSolo} onStartMulti={handleStartMulti} />;
+  return (
+    <HomePanel
+      onStartSolo={handleStartSolo}
+      onStartMulti={handleStartMulti}
+      onOpenDeckBuilder={handleOpenDeckBuilder}
+    />
+  );
+}
+
+if (appPhase === "deck_builder") {
+  return (
+    <DeckBuilder onBack={() => setAppPhase("lobby")}
+      onUseDeck={(deck) => {
+        if (!currentRoomId) {
+          console.log("Pas de room, deck non envoyé.");
+          return;
+        }
+
+        socket.emit("SET_PLAYER_DECK", {
+          roomId: currentRoomId,
+          deck,
+        });
+
+        console.log("📦 Deck envoyé au serveur :", deck);
+      }}
+    />
+  );
 }
 
 if (appPhase === "lobby") {
+  const player1DeckReady = roomDecks.player1?.isExplicitChoice === true;
+  const player2DeckReady = roomDecks.player2?.isExplicitChoice === true;
+
+  const bothDecksReady = player1DeckReady && player2DeckReady;
   return (
     <div
       style={{
@@ -1876,27 +2036,64 @@ if (appPhase === "lobby") {
         </div>
 
         <RoomPanel
-          isSocketConnected={isSocketConnected}
-          socketId={socketId}
-          roomCodeInput={roomCodeInput}
-          setRoomCodeInput={setRoomCodeInput}
-          currentRoomId={currentRoomId}
-          roomMessage={roomMessage}
-          roomPlayerCount={roomPlayerCount}
-          localPlayer={localPlayer}
-          handleCreateRoom={handleCreateRoom}
-          handleJoinRoom={handleJoinRoom}
-        />
+  isSocketConnected={isSocketConnected}
+  socketId={socketId}
+  roomCodeInput={roomCodeInput}
+  setRoomCodeInput={setRoomCodeInput}
+  currentRoomId={currentRoomId}
+  roomMessage={roomMessage}
+  roomPlayerCount={roomPlayerCount}
+  localPlayer={localPlayer}
+  handleCreateRoom={handleCreateRoom}
+  handleJoinRoom={handleJoinRoom}
+/>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-          <ActionButton onClick={handleBackToHome}>Accueil</ActionButton>
-          <ActionButton
-            onClick={handleStartSetup}
-            disabled={!currentRoomId || roomPlayerCount < 2 || localPlayer !== 1}
-          >
-            Lancer le setup
-          </ActionButton>
-        </div>
+<div
+  style={{
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    background: "#172036",
+    border: "1px solid rgba(255,255,255,0.08)",
+    fontSize: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  }}
+>
+  <div style={{ fontWeight: 700 }}>Decks multi</div>
+  <div>
+  J1 : {player1DeckReady ? `✅ ${roomDecks.player1.name}` : "❌ aucun deck"}
+</div>
+
+<div>
+  J2 : {player2DeckReady ? `✅ ${roomDecks.player2.name}` : "❌ aucun deck"}
+</div>
+</div>
+
+{!bothDecksReady && (
+  <div style={{ fontSize: 13, opacity: 0.8 }}>
+    Les deux joueurs doivent sélectionner un deck avant de lancer la partie.
+  </div>
+)}
+
+<div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+  <ActionButton onClick={handleBackToHome}>Accueil</ActionButton>
+  <ActionButton onClick={() => setAppPhase("deck_builder")}>
+  Choisir mon deck
+</ActionButton>
+  <ActionButton
+  onClick={handleStartSetup}
+  disabled={
+    !currentRoomId ||
+    roomPlayerCount < 2 ||
+    localPlayer !== 1 ||
+    !bothDecksReady
+  }
+>
+    Lancer le setup
+  </ActionButton>
+</div>
       </div>
     </div>
   );

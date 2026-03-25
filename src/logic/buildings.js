@@ -132,8 +132,62 @@ function getCellOwner(x, y) {
   return null;
 }
 
+function manhattan(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function getPlayerAnchorCells(buildings, player) {
+  return buildings
+    .filter(
+      (building) =>
+        building.player === player &&
+        (building.type === "townhall" ||
+          building.type === "house" ||
+          building.type === "production_food" ||
+          building.type === "production_gold")
+    )
+    .flatMap((building) => normalizeBuildingCells(building));
+}
+
+function getAverageDistanceToAnchors(cells, anchors) {
+  if (!anchors.length) return Number.POSITIVE_INFINITY;
+
+  let total = 0;
+
+  for (const cell of cells) {
+    let best = Number.POSITIVE_INFINITY;
+
+    for (const anchor of anchors) {
+      const dist = manhattan(cell, anchor);
+      if (dist < best) best = dist;
+    }
+
+    total += best;
+  }
+
+  return total / cells.length;
+}
+
+function getDefenseCellOwner(buildings, x, y) {
+  if (BOARD[y]?.[x] !== "noir") return null;
+
+  const p1Anchors = getPlayerAnchorCells(buildings, 1);
+  const p2Anchors = getPlayerAnchorCells(buildings, 2);
+
+  const probe = [{ x, y }];
+
+  const p1Distance = getAverageDistanceToAnchors(probe, p1Anchors);
+  const p2Distance = getAverageDistanceToAnchors(probe, p2Anchors);
+
+  if (p1Distance < p2Distance) return 1;
+  if (p2Distance < p1Distance) return 2;
+
+  return null;
+}
+
 function canPlacePair({
   occupied,
+  buildings,
   player,
   x,
   y,
@@ -146,9 +200,13 @@ function canPlacePair({
     y: y + (orientation === "vertical" ? index : 0),
   }));
 
-  const allOwned = cells.every(
-    (cell) => getCellOwner(cell.x, cell.y) === player
-  );
+  const allOwned = cells.every((cell) => {
+    if (expectedTerrain === "noir") {
+      return getDefenseCellOwner(buildings, cell.x, cell.y) === player;
+    }
+
+    return getCellOwner(cell.x, cell.y) === player;
+  });
   if (!allOwned) return false;
 
   const allOnExpectedTerrain = cells.every(
@@ -185,13 +243,20 @@ export function getValidBuildingPlacements(
 
   for (let y = 0; y < BOARD.length; y += 1) {
     for (let x = 0; x < BOARD[0].length; x += 1) {
-      if (getCellOwner(x, y) !== player) continue;
       if (BOARD[y]?.[x] !== expectedTerrain) continue;
+
+      const owner =
+        expectedTerrain === "noir"
+          ? getDefenseCellOwner(buildings, x, y)
+          : getCellOwner(x, y);
+
+      if (owner !== player) continue;
 
       if (
         allowVertical &&
         canPlacePair({
           occupied,
+          buildings,
           player,
           x,
           y,
@@ -207,6 +272,7 @@ export function getValidBuildingPlacements(
         allowHorizontal &&
         canPlacePair({
           occupied,
+          buildings,
           player,
           x,
           y,
