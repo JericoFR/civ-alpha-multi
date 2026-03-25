@@ -334,6 +334,8 @@ io.on("connection", (socket) => {
     }
   });
 
+
+
   socket.on("REQUEST_REMATCH", ({ roomId }) => {
     const room = getRoom(roomId);
 
@@ -368,6 +370,51 @@ io.on("connection", (socket) => {
 
     console.log(`🔁 Demande de revanche dans ${roomId} par ${socket.id}`);
   });
+
+   
+
+socket.on("SCIENCE_PEEK", ({ roomId, pileType }) => {
+  const room = getRoom(roomId);
+
+  if (!room || room.phase !== "game" || !room.state) return;
+
+  const playerIndex = room.players.indexOf(socket.id);
+  if (playerIndex === -1) return;
+
+  const player = playerIndex + 1;
+
+  // 🔴 1. CHECK si déjà utilisé
+  if (room.state.scienceActionUsedThisPhase) {
+    socket.emit("errorMessage", "Action science déjà utilisée ce tour.");
+    return;
+  }
+
+  // 🔴 2. récupérer carte
+  const pile =
+    pileType === "points"
+      ? room.state.remainingPointDeck
+      : room.state.remainingEventDeck;
+
+  const card = pile?.[0] || null;
+
+  // 🔴 3. MARQUER comme utilisé
+  const newState = {
+    ...room.state,
+    scienceActionUsedThisPhase: true,
+  };
+
+  room.state = newState;
+
+  // 🔴 4. sync pour bloquer les boutons
+  io.to(roomId).emit("GAME_STATE", newState);
+
+  // 🔴 5. envoi privé de la carte
+  socket.emit("SCIENCE_PEEK_RESULT", {
+    player,
+    pileType,
+    card,
+  });
+});
 
   socket.on("RESPOND_REMATCH", ({ roomId, accept }) => {
     const room = getRoom(roomId);

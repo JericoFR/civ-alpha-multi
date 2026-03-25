@@ -10,8 +10,7 @@ export const PHASES = [
   { key: "military_move", label: "Mouvement militaire", activePlayer: null },
   { key: "military_resolve", label: "Résolution militaire", activePlayer: null },
   { key: "buy", label: "Achats", activePlayer: null },
-  { key: "economy_1", label: "Économie — J1", activePlayer: 1 },
-  { key: "economy_2", label: "Économie — J2", activePlayer: 2 },
+  { key: "economy", label: "Économie", activePlayer: null },
   { key: "production", label: "Production", activePlayer: null },
   { key: "science", label: "Science", activePlayer: null },
 ];
@@ -75,6 +74,17 @@ export function createInitialState() {
     phaseActivatedUnitIds: [],
     militaryConsecutivePasses: 0,
     productionDoneThisPhase: false,
+    militaryResolutionDoneThisPhase: false,
+buyPasses: {
+  player1: false,
+  player2: false,
+},
+
+economyPasses: {
+  player1: false,
+  player2: false,
+},
+
     resourceVersion: 0,
     pendingHousingSacrificePlayers: [],
 
@@ -93,6 +103,7 @@ export function createInitialState() {
 
     scienceActionUsedThisPhase: false,
     sciencePeek: null,
+    pendingDirectionUnitId: null,
 
     activePointCard: eraSetup.activePointCard,
     activeEventCard: eraSetup.activeEventCard,

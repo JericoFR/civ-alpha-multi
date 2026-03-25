@@ -177,35 +177,18 @@ function formatOverflowMessage(players) {
 }
 
 function resetEconomySelectionForPhase(state, nextPhaseKey) {
-  if (nextPhaseKey === "economy_1") {
+  if (nextPhaseKey === "economy") {
     return {
       economySelection: {
-        ...state.economySelection,
         player1: null,
-      },
-      economyChoiceLocked: {
-        ...state.economyChoiceLocked,
-        player1: false,
-      },
-      economyCentralBonusUsed: {
-        ...state.economyCentralBonusUsed,
-        player1: false,
-      },
-    };
-  }
-
-  if (nextPhaseKey === "economy_2") {
-    return {
-      economySelection: {
-        ...state.economySelection,
         player2: null,
       },
       economyChoiceLocked: {
-        ...state.economyChoiceLocked,
+        player1: false,
         player2: false,
       },
       economyCentralBonusUsed: {
-        ...state.economyCentralBonusUsed,
+        player1: false,
         player2: false,
       },
     };
@@ -229,6 +212,7 @@ function finishMilitaryPhase(state, debugText, selectedUnitId = null) {
     purchasePlayer: null,
     phaseActivatedUnitIds: [],
     militaryConsecutivePasses: 0,
+    militaryResolutionDoneThisPhase: false,
     debugText,
   };
 }
@@ -356,6 +340,17 @@ function buildPhaseTransitionState(state, nextPhaseKey) {
     phaseActivatedUnitIds: [],
     militaryConsecutivePasses: 0,
     productionDoneThisPhase: false,
+    militaryResolutionDoneThisPhase: false,
+buyPasses: {
+  player1: false,
+  player2: false,
+},
+
+economyPasses: {
+  player1: false,
+  player2: false,
+},
+
     scienceActionUsedThisPhase: false,
     sciencePeek: null,
     debugText: `Nouvelle phase : ${phaseDef.label}`,
@@ -426,6 +421,15 @@ function getSciencePeekCard(state, pileType) {
 }
 
 export function gameReducer(state, action) {
+    if (
+    state.pendingDirectionUnitId &&
+    action.type !== "SET_UNIT_DIRECTION"
+  ) {
+    return {
+      ...state,
+      debugText: "Tu dois orienter ton archer avant de continuer.",
+    };
+  }
   switch (action.type) {
     case "SELECT_UNIT": {
       if (state.pendingHousingSacrificePlayers.length > 0) {
@@ -612,6 +616,7 @@ export function gameReducer(state, action) {
         }`,
       };
     }
+
 
     case "CLEAR_SELECTION": {
       return {
@@ -829,6 +834,10 @@ export function gameReducer(state, action) {
       }
 
       const spawnedUnit = createSpawnedUnit(unitType, player, x, y, unitId);
+      let pendingDirectionUnitId = null;
+if (unitType === "archer") {
+  pendingDirectionUnitId = spawnedUnit.id;
+}
 
       return {
         ...state,
@@ -838,6 +847,7 @@ export function gameReducer(state, action) {
           [playerKey]: spendCost(state.resources[playerKey], cost),
         },
         selectedUnitId: unitType === "archer" || unitType === "siege" ? spawnedUnit.id : null,
+        pendingDirectionUnitId,
         purchaseMode: null,
         purchasePlayer: null,
         resourceVersion: (state.resourceVersion ?? 0) + 1,
@@ -881,12 +891,13 @@ export function gameReducer(state, action) {
       }
 
       return {
-        ...state,
-        units: state.units.map((currentUnit) =>
-          currentUnit.id === unitId ? { ...currentUnit, direction } : currentUnit
-        ),
-        debugText: `${UNIT_DEFS[unit.type]?.name ?? unit.type} orienté vers ${direction}.`,
-      };
+  ...state,
+  units: state.units.map((currentUnit) =>
+    currentUnit.id === unitId ? { ...currentUnit, direction } : currentUnit
+  ),
+  pendingDirectionUnitId: null,
+  debugText: `${UNIT_DEFS[unit.type]?.name ?? unit.type} orienté vers ${direction}.`,
+};
     }
 
     case "MOVE_UNIT": {
@@ -970,29 +981,34 @@ export function gameReducer(state, action) {
           movedUnit.type === "archer" || movedUnit.type === "siege";
 
         return {
-          ...state,
-          units: updatedUnits,
-          selectedUnitId: keepSelectedAfterMove ? unitId : null,
-          phaseActivatedUnitIds: nextActivatedIds,
-          militaryConsecutivePasses: 0,
-          activePlayer: nextMilitaryPlayer,
-          debugText:
-            nextMilitaryPlayer === state.activePlayer
-              ? `Déplacement validé vers ${x},${y}. J${state.activePlayer} rejoue (plus aucune unité adverse disponible).`
-              : `Déplacement validé vers ${x},${y}. À J${nextMilitaryPlayer}.`,
-        };
+  ...state,
+  units: updatedUnits,
+  selectedUnitId: keepSelectedAfterMove ? unitId : null,
+  pendingDirectionUnitId: keepSelectedAfterMove ? unitId : null,
+  phaseActivatedUnitIds: nextActivatedIds,
+  militaryConsecutivePasses: 0,
+  activePlayer: nextMilitaryPlayer,
+  debugText: keepSelectedAfterMove
+    ? `Déplacement validé vers ${x},${y}. Choisis maintenant l'orientation de l'archer.`
+    : nextMilitaryPlayer === state.activePlayer
+    ? `Déplacement validé vers ${x},${y}. J${state.activePlayer} rejoue (plus aucune unité adverse disponible).`
+    : `Déplacement validé vers ${x},${y}. À J${nextMilitaryPlayer}.`,
+};
       }
 
       const keepSelectedAfterMove =
         movedUnit.type === "archer" || movedUnit.type === "siege";
 
       return {
-        ...state,
-        units: updatedUnits,
-        selectedUnitId: keepSelectedAfterMove ? unitId : null,
-        phaseActivatedUnitIds: nextActivatedIds,
-        debugText: `Déplacement validé vers ${x},${y}`,
-      };
+  ...state,
+  units: updatedUnits,
+  selectedUnitId: keepSelectedAfterMove ? unitId : null,
+  pendingDirectionUnitId: keepSelectedAfterMove ? unitId : null,
+  phaseActivatedUnitIds: nextActivatedIds,
+  debugText: keepSelectedAfterMove
+    ? `Déplacement validé vers ${x},${y}. Choisis maintenant l'orientation de l'archer.`
+    : `Déplacement validé vers ${x},${y}`,
+};
     }
 
     case "PASS_MILITARY_TURN": {
@@ -1058,6 +1074,12 @@ export function gameReducer(state, action) {
 
     case "RESOLVE_MILITARY": {
       if (state.phase !== "military_resolve") return state;
+      if (state.militaryResolutionDoneThisPhase) {
+  return {
+    ...state,
+    debugText: "La résolution militaire a déjà été effectuée pour cette phase.",
+  };
+}
 
       const result = resolveMilitaryPressure(state.units, state.buildings, {
         buildingBurnThreshold: state.activeEventCard?.key === "instability" ? 2 : 3,
@@ -1093,6 +1115,7 @@ export function gameReducer(state, action) {
         buildings: result.buildings,
         points: nextPoints,
         pendingHousingSacrificePlayers: overflowPlayers,
+        militaryResolutionDoneThisPhase: true,
         debugText:
           overflowPlayers.length > 0
             ? `${buildMilitaryResolutionDebug(result)} ${formatOverflowMessage(overflowPlayers)}`
@@ -1111,19 +1134,12 @@ export function gameReducer(state, action) {
         };
       }
 
-      if (!["economy_1", "economy_2"].includes(state.phase)) {
-        return {
-          ...state,
-          debugText: "Le choix du marché n'est possible qu'en phase économie.",
-        };
-      }
-
-      if (state.activePlayer !== player) {
-        return {
-          ...state,
-          debugText: `Ce n'est pas à J${player} de choisir son marché.`,
-        };
-      }
+      if (state.phase !== "economy") {
+  return {
+    ...state,
+    debugText: "Le choix du marché n'est possible qu'en phase économie.",
+  };
+}
 
       if (!["personal", "central"].includes(marketType)) {
         return {
@@ -1176,19 +1192,12 @@ export function gameReducer(state, action) {
         };
       }
 
-      if (!["economy_1", "economy_2"].includes(state.phase)) {
-        return {
-          ...state,
-          debugText: "La conversion n'est possible que pendant la phase économie.",
-        };
-      }
-
-      if (state.activePlayer !== player) {
-        return {
-          ...state,
-          debugText: `Ce n'est pas à J${player} de convertir ses ressources.`,
-        };
-      }
+      if (state.phase !== "economy") {
+  return {
+    ...state,
+    debugText: "La conversion n'est possible que pendant la phase économie.",
+  };
+}
 
       if (!["food", "gold"].includes(resource)) {
         return {
@@ -1461,7 +1470,107 @@ export function gameReducer(state, action) {
       };
     }
 
+case "PASS_BUY": {
+  if (state.phase !== "buy") {
+    return state;
+  }
+
+  const player = action.player;
+
+  if (player !== 1 && player !== 2) {
+    return {
+      ...state,
+      debugText: "Pass achats invalide.",
+    };
+  }
+
+  const playerKey = getPlayerKey(player);
+
+  if (state.buyPasses?.[playerKey]) {
+    return {
+      ...state,
+      debugText: `J${player} a déjà passé ses achats.`,
+    };
+  }
+
+  return {
+    ...state,
+    buyPasses: {
+      ...state.buyPasses,
+      [playerKey]: true,
+    },
+    purchaseMode: null,
+    purchasePlayer: null,
+    selectedUnitId: null,
+    selectedCardKey: null,
+    debugText: `J${player} passe ses achats.`,
+  };
+}
+
+case "PASS_ECONOMY": {
+  if (state.phase !== "economy") {
+    return state;
+  }
+
+  const player = action.player;
+  const playerKey = getPlayerKey(player);
+
+  if (state.economyPasses?.[playerKey]) {
+    return {
+      ...state,
+      debugText: `J${player} a déjà passé son économie.`,
+    };
+  }
+
+  return {
+    ...state,
+    economyPasses: {
+      ...state.economyPasses,
+      [playerKey]: true,
+    },
+    debugText: `J${player} passe son économie.`,
+  };
+}
+
+
     case "NEXT_PHASE": {
+      if (state.phase === "military_resolve" && !state.militaryResolutionDoneThisPhase) {
+  return {
+    ...state,
+    debugText: "Tu dois d'abord cliquer sur « Résoudre la pression » avant de passer à la phase suivante.",
+  };
+}
+if (state.phase === "buy") {
+  const j1Passed = state.buyPasses?.player1 ?? false;
+  const j2Passed = state.buyPasses?.player2 ?? false;
+
+  if (!j1Passed || !j2Passed) {
+    return {
+      ...state,
+      debugText: "Les deux joueurs doivent passer leurs achats avant de passer à la phase suivante.",
+    };
+  }
+}
+
+if (state.phase === "economy") {
+  const j1Passed = state.economyPasses?.player1 ?? false;
+  const j2Passed = state.economyPasses?.player2 ?? false;
+
+  if (!j1Passed || !j2Passed) {
+    return {
+      ...state,
+      debugText: "Les deux joueurs doivent passer leur économie avant de passer à la phase suivante.",
+    };
+  }
+}
+
+if (state.phase === "production" && !state.productionDoneThisPhase) {
+  return {
+    ...state,
+    debugText: "Tu dois d'abord cliquer sur « Produire » avant de passer à la phase suivante.",
+  };
+}
+
       if (state.pendingHousingSacrificePlayers.length > 0) {
         return {
           ...state,

@@ -24,6 +24,7 @@ import { createInitialState, getPhaseDefinition, initialState } from "./state/in
 const TURNS_PER_ERA = 10;
 const TOTAL_ERAS = 4;
 
+
 const SETUP_STEPS = [
   { player: 1, type: "worker", label: "J1 place son 1er ouvrier" },
   { player: 2, type: "worker", label: "J2 place son 1er ouvrier" },
@@ -166,10 +167,49 @@ function ToggleCard({ checked, onChange }) {
   );
 }
 
-function getPhaseActionLabel(phase, activePlayer) {
+function getPhaseActionLabel(phase, activePlayer, buyPasses, economyPasses, localPlayer) {
   if (phase === "military_move") {
     return activePlayer ? `Passer J${activePlayer}` : "Passer";
   }
+
+  if (phase === "buy") {
+    const j1Passed = buyPasses?.player1 ?? false;
+    const j2Passed = buyPasses?.player2 ?? false;
+
+    if (j1Passed && j2Passed) {
+      return "Phase suivante";
+    }
+
+    if (localPlayer === 1 && j1Passed) {
+      return "Achats passés";
+    }
+
+    if (localPlayer === 2 && j2Passed) {
+      return "Achats passés";
+    }
+
+    return "Passer achats";
+  }
+
+  if (phase === "economy") {
+    const j1Passed = economyPasses?.player1 ?? false;
+    const j2Passed = economyPasses?.player2 ?? false;
+
+    if (j1Passed && j2Passed) {
+      return "Phase suivante";
+    }
+
+    if (localPlayer === 1 && j1Passed) {
+      return "Économie passée";
+    }
+
+    if (localPlayer === 2 && j2Passed) {
+      return "Économie passée";
+    }
+
+    return "Passer économie";
+  }
+
   return "Phase suivante";
 }
 
@@ -341,11 +381,11 @@ function PurchasePanel({
   function hasActiveBarracks(buildings, units, player, level) {
   return buildings.some((b) => {
     if (b.player !== player) return false;
-    if (b.isOnFire) return false;
+    if (b.isBurning) return false;
 
     const isCorrectBarracks =
-      (level === 1 && b.type === "barracks") ||
-      (level === 2 && b.type === "barracks_2");
+  (level === 1 && (b.type === "barracks_1" || b.type === "barracks_2")) ||
+  (level === 2 && b.type === "barracks_2");
 
     if (!isCorrectBarracks) return false;
 
@@ -503,7 +543,6 @@ function PurchasePanel({
 
 function EconomyCompactPanel({
   phase,
-  activePlayer,
   resources,
   buildings,
   units,
@@ -512,20 +551,142 @@ function EconomyCompactPanel({
   onSelectEconomyMarket,
   onConvertResources,
 }) {
-  if (!["economy_1", "economy_2"].includes(phase) || !activePlayer) return null;
-
-  const playerKey = activePlayer === 1 ? "player1" : "player2";
-  const playerResources = resources[playerKey];
-  const selectedMarket = economySelection[playerKey];
-  const isLocked = economyChoiceLocked[playerKey];
-  const personalAvailable = hasActivePersonalMarket(buildings, units, activePlayer);
-  const centralStatus = getCentralMarketStatus(units, activePlayer);
-  const centralAvailable = canUseCentralMarket(units, activePlayer);
+  if (phase !== "economy") return null;
 
   const rows = [
     { key: "food", label: "🌾" },
     { key: "gold", label: "💰" },
   ];
+
+  function renderPlayerColumn(player) {
+    const playerKey = player === 1 ? "player1" : "player2";
+    const playerResources = resources[playerKey];
+    const selectedMarket = economySelection[playerKey];
+    const isLocked = economyChoiceLocked[playerKey];
+    const personalAvailable = hasActivePersonalMarket(buildings, units, player);
+    const centralStatus = getCentralMarketStatus(units, player);
+    const centralAvailable = canUseCentralMarket(units, player);
+
+    return (
+      <div
+        style={{
+          background: "#172036",
+          borderRadius: 12,
+          padding: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          minWidth: 220,
+          flex: 1,
+        }}
+      >
+        <div style={{ fontWeight: 700 }}>Économie J{player}</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+          <button
+            type="button"
+            disabled={!personalAvailable || isLocked}
+            onClick={() => onSelectEconomyMarket(player, "personal")}
+            style={{
+              borderRadius: 12,
+              padding: 12,
+              textAlign: "left",
+              border:
+                selectedMarket === "personal"
+                  ? "2px solid rgba(34, 197, 94, 0.95)"
+                  : "1px solid rgba(255,255,255,0.12)",
+              background: !personalAvailable ? "#1f2937" : selectedMarket === "personal" ? "#0f3d2e" : "#172036",
+              color: "white",
+              opacity: !personalAvailable ? 0.6 : 1,
+              cursor: !personalAvailable || isLocked ? "not-allowed" : "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Marché personnel</div>
+            <div style={{ fontSize: 12, opacity: 0.82 }}>
+              {personalAvailable ? "Disponible" : "Indisponible : marché actif + ouvrier requis"}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            disabled={!centralAvailable || isLocked}
+            onClick={() => onSelectEconomyMarket(player, "central")}
+            style={{
+              borderRadius: 12,
+              padding: 12,
+              textAlign: "left",
+              border:
+                selectedMarket === "central"
+                  ? "2px solid rgba(249, 115, 22, 0.95)"
+                  : "1px solid rgba(255,255,255,0.12)",
+              background: !centralAvailable ? "#1f2937" : selectedMarket === "central" ? "#4a2307" : "#172036",
+              color: "white",
+              opacity: !centralAvailable ? 0.6 : 1,
+              cursor: !centralAvailable || isLocked ? "not-allowed" : "pointer",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Marché central</div>
+            <div style={{ fontSize: 12, opacity: 0.82 }}>
+              {centralAvailable
+                ? "Disponible : 1 ouvrier allié, aucun ennemi sur la croix orange"
+                : `Indispo : ${centralStatus.alliedWorkerCount} ouvrier allié, ${centralStatus.enemyUnitCount} ennemi`}
+            </div>
+          </button>
+        </div>
+
+        <div style={{ fontSize: 12, opacity: 0.78 }}>
+          Marché choisi :{" "}
+          {selectedMarket === "central" ? "central" : selectedMarket === "personal" ? "personnel" : "aucun"}
+          {isLocked ? " · verrouillé pour cette phase" : " · modifiable tant que tu n'as pas converti"}
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+            gap: 8,
+          }}
+        >
+          {rows.map((row) => {
+            const stock = Number(playerResources[row.key] ?? 0);
+            const maxLots = Math.floor(stock / 5);
+            const noMarketSelected = !selectedMarket;
+
+            return (
+              <div
+                key={`${player}-${row.key}`}
+                style={{
+                  background: "#111827",
+                  borderRadius: 12,
+                  padding: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>
+                  {row.label} {row.key}
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.82 }}>Stock : {stock}</div>
+                <ActionButton
+                  disabled={maxLots < 1 || noMarketSelected}
+                  onClick={() => onConvertResources(player, row.key, 1)}
+                >
+                  5 → {selectedMarket === "central" ? "1 PV (bonus centre global +1 max/tour)" : "1 PV"}
+                </ActionButton>
+                <ActionButton
+                  disabled={maxLots < 1 || noMarketSelected}
+                  onClick={() => onConvertResources(player, row.key, maxLots)}
+                >
+                  Tout ({maxLots})
+                </ActionButton>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -541,114 +702,14 @@ function EconomyCompactPanel({
         gap: 10,
       }}
     >
-      <div style={{ fontWeight: 700 }}>Économie J{activePlayer}</div>
+      <div style={{ fontWeight: 700 }}>Fenêtre d'économie</div>
       <div style={{ fontSize: 12, opacity: 0.78 }}>
-        Choisis 1 marché pour toute la phase puis convertis. Marché perso : 5 identiques → 1 PV. Marché central :
-        conversions illimitées comme le marché perso, avec seulement +1 PV bonus maximum sur l'ensemble du tour si le
-        centre est utilisé.
+        Les deux joueurs jouent en simultané. Chacun choisit un marché puis convertit ses ressources. Les deux doivent passer pour continuer.
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-        <button
-          type="button"
-          disabled={!personalAvailable || isLocked}
-          onClick={() => onSelectEconomyMarket(activePlayer, "personal")}
-          style={{
-            borderRadius: 12,
-            padding: 12,
-            textAlign: "left",
-            border:
-              selectedMarket === "personal"
-                ? "2px solid rgba(34, 197, 94, 0.95)"
-                : "1px solid rgba(255,255,255,0.12)",
-            background: !personalAvailable ? "#1f2937" : selectedMarket === "personal" ? "#0f3d2e" : "#172036",
-            color: "white",
-            opacity: !personalAvailable ? 0.6 : 1,
-            cursor: !personalAvailable || isLocked ? "not-allowed" : "pointer",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Marché personnel</div>
-          <div style={{ fontSize: 12, opacity: 0.82 }}>
-            {personalAvailable ? "Disponible" : "Indisponible : marché actif + ouvrier requis"}
-          </div>
-        </button>
-
-        <button
-          type="button"
-          disabled={!centralAvailable || isLocked}
-          onClick={() => onSelectEconomyMarket(activePlayer, "central")}
-          style={{
-            borderRadius: 12,
-            padding: 12,
-            textAlign: "left",
-            border:
-              selectedMarket === "central"
-                ? "2px solid rgba(249, 115, 22, 0.95)"
-                : "1px solid rgba(255,255,255,0.12)",
-            background: !centralAvailable ? "#1f2937" : selectedMarket === "central" ? "#4a2307" : "#172036",
-            color: "white",
-            opacity: !centralAvailable ? 0.6 : 1,
-            cursor: !centralAvailable || isLocked ? "not-allowed" : "pointer",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Marché central</div>
-          <div style={{ fontSize: 12, opacity: 0.82 }}>
-            {centralAvailable
-              ? "Disponible : 1 ouvrier allié, aucun ennemi sur la croix orange"
-              : `Indispo : ${centralStatus.alliedWorkerCount} ouvrier allié, ${centralStatus.enemyUnitCount} ennemi`}
-          </div>
-        </button>
-      </div>
-
-      <div style={{ fontSize: 12, opacity: 0.78 }}>
-        Marché choisi :{" "}
-        {selectedMarket === "central" ? "central" : selectedMarket === "personal" ? "personnel" : "aucun"}
-        {isLocked ? " · verrouillé pour cette phase" : " · modifiable tant que tu n'as pas converti"}
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-          gap: 8,
-        }}
-      >
-        {rows.map((row) => {
-          const stock = Number(playerResources[row.key] ?? 0);
-          const maxLots = Math.floor(stock / 5);
-          const noMarketSelected = !selectedMarket;
-
-          return (
-            <div
-              key={row.key}
-              style={{
-                background: "#172036",
-                borderRadius: 12,
-                padding: 10,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ fontWeight: 700 }}>
-                {row.label} {row.key}
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.82 }}>Stock : {stock}</div>
-              <ActionButton
-                disabled={maxLots < 1 || noMarketSelected}
-                onClick={() => onConvertResources(activePlayer, row.key, 1)}
-              >
-                5 → {selectedMarket === "central" ? "1 PV (bonus centre global +1 max/tour)" : "1 PV"}
-              </ActionButton>
-              <ActionButton
-                disabled={maxLots < 1 || noMarketSelected}
-                onClick={() => onConvertResources(activePlayer, row.key, maxLots)}
-              >
-                Tout ({maxLots})
-              </ActionButton>
-            </div>
-          );
-        })}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {renderPlayerColumn(1)}
+        {renderPlayerColumn(2)}
       </div>
     </div>
   );
@@ -1017,7 +1078,7 @@ export default function App() {
   const [gameMode, setGameMode] = useState(null);
   const [rematchPending, setRematchPending] = useState(false);
   const [rematchRequest, setRematchRequest] = useState(null);
-
+  const [privateSciencePeek, setPrivateSciencePeek] = useState(null);
   const currentRoomIdRef = useRef("");
   const localPlayerRef = useRef(null);
 
@@ -1160,6 +1221,10 @@ function handleRematchDeclined(payload) {
       setRoomMessage(message);
     }
 
+    function handleSciencePeekResult(data) {
+  setPrivateSciencePeek(data ?? null);
+}
+
     socket.connect();
 
     socket.on("connect", handleConnect);
@@ -1168,8 +1233,9 @@ function handleRematchDeclined(payload) {
     socket.on("roomJoined", handleRoomJoined);
     socket.on("roomUpdate", handleRoomUpdate);
     socket.on("GAME_STATE", handleGameState);
-    socket.on("errorMessage", handleErrorMessage);
-    socket.on("SETUP_UPDATE", handleSetupUpdate);
+socket.on("errorMessage", handleErrorMessage);
+socket.on("SCIENCE_PEEK_RESULT", handleSciencePeekResult);
+socket.on("SETUP_UPDATE", handleSetupUpdate);
     socket.on("GAME_START", handleGameStart);
     socket.on("RETURN_TO_LOBBY", handleReturnToLobby);
     socket.on("REMATCH_REQUESTED", handleRematchRequest);
@@ -1203,6 +1269,7 @@ socket.on("REMATCH_ACCEPTED_WAITING", () => {
       socket.off("roomUpdate", handleRoomUpdate);
       socket.off("GAME_STATE", handleGameState);
       socket.off("errorMessage", handleErrorMessage);
+      socket.off("SCIENCE_PEEK_RESULT", handleSciencePeekResult);
       socket.off("SETUP_UPDATE", handleSetupUpdate);
       socket.off("GAME_START", handleGameStart);
       socket.off("RETURN_TO_LOBBY", handleReturnToLobby);
@@ -1237,9 +1304,14 @@ socket.on("REMATCH_ACCEPTED_WAITING", () => {
     activeEventCard,
     scienceActionUsedThisPhase,
     sciencePeek,
+    pendingDirectionUnitId,
     debugText,
+    militaryResolutionDoneThisPhase,
+    buyPasses,
+    economyPasses,
   } = gameState;
 
+  const displayedSciencePeek = currentRoomId ? privateSciencePeek : sciencePeek;
   const currentEra = Math.min(TOTAL_ERAS, Math.max(1, Math.ceil(turn / TURNS_PER_ERA)));
   const turnInEra = ((turn - 1) % TURNS_PER_ERA) + 1;
 
@@ -1601,25 +1673,78 @@ function handleSetupPlacement(x, y) {
   }
 
   function handleMainAction() {
-    const canActInRoom =
-      !currentRoomId ||
-      !localPlayer ||
-      !activePlayer ||
-      localPlayer === activePlayer ||
-      ["buy", "production", "science", "military_resolve"].includes(phase);
+  const canActInRoom =
+    !currentRoomId ||
+    !localPlayer ||
+    !activePlayer ||
+    localPlayer === activePlayer ||
+    ["buy", "production", "science", "military_resolve"].includes(phase);
 
-    if (!canActInRoom) {
-      applyAction({ type: "SET_DEBUG_TEXT", payload: { text: `Action refusée : ce n'est pas le tour de J${localPlayer}.` } });
-      return;
-    }
-
-    if (phase === "military_move") {
-      applyAction({ type: "PASS_MILITARY_TURN", player: localPlayer });
-      return;
-    }
-
-    applyAction({ type: "NEXT_PHASE", player: localPlayer });
+  if (!canActInRoom) {
+    applyAction({
+      type: "SET_DEBUG_TEXT",
+      payload: { text: `Action refusée : ce n'est pas le tour de J${localPlayer}.` },
+    });
+    return;
   }
+
+  if (phase === "military_move") {
+    applyAction({ type: "PASS_MILITARY_TURN", player: localPlayer });
+    return;
+  }
+
+  if (phase === "buy") {
+    const j1Passed = buyPasses?.player1 ?? false;
+    const j2Passed = buyPasses?.player2 ?? false;
+    const localPassed =
+      localPlayer === 1 ? j1Passed :
+      localPlayer === 2 ? j2Passed :
+      false;
+
+    if (j1Passed && j2Passed) {
+      applyAction({ type: "NEXT_PHASE", player: localPlayer });
+      return;
+    }
+
+    if (localPassed) {
+      applyAction({
+        type: "SET_DEBUG_TEXT",
+        payload: { text: "Tu as déjà passé tes achats." },
+      });
+      return;
+    }
+
+    applyAction({ type: "PASS_BUY", player: localPlayer });
+    return;
+  }
+
+if (phase === "economy") {
+  const j1Passed = economyPasses?.player1 ?? false;
+  const j2Passed = economyPasses?.player2 ?? false;
+  const localPassed =
+    localPlayer === 1 ? j1Passed :
+    localPlayer === 2 ? j2Passed :
+    false;
+
+  if (j1Passed && j2Passed) {
+    applyAction({ type: "NEXT_PHASE", player: localPlayer });
+    return;
+  }
+
+  if (localPassed) {
+    applyAction({
+      type: "SET_DEBUG_TEXT",
+      payload: { text: "Tu as déjà passé ton économie." },
+    });
+    return;
+  }
+
+  applyAction({ type: "PASS_ECONOMY", player: localPlayer });
+  return;
+}
+
+  applyAction({ type: "NEXT_PHASE", player: localPlayer });
+}
 
   function handleResolveMilitary() {
     applyAction({ type: "RESOLVE_MILITARY", player: localPlayer });
@@ -1630,12 +1755,30 @@ function handleSetupPlacement(x, y) {
   }
 
   function handlePeekScience(pileType) {
-    applyAction({ type: "OPEN_SCIENCE_PEEK", player: localPlayer, payload: { pileType } });
+  if (currentRoomIdRef.current) {
+    socket.emit("SCIENCE_PEEK", {
+      roomId: currentRoomIdRef.current,
+      pileType,
+    });
+    return;
   }
 
+  // fallback solo
+  applyAction({
+    type: "OPEN_SCIENCE_PEEK",
+    player: localPlayer,
+    payload: { pileType },
+  });
+}
+
   function handleCloseSciencePeek() {
-    applyAction({ type: "CLOSE_SCIENCE_PEEK", player: localPlayer });
+  if (currentRoomIdRef.current) {
+    setPrivateSciencePeek(null);
+    return;
   }
+
+  applyAction({ type: "CLOSE_SCIENCE_PEEK", player: localPlayer });
+}
 
   function handleResetGame() {
     if (currentRoomId) {
@@ -1928,8 +2071,13 @@ if (appPhase === "setup") {
             </ActionButton>
 
             {phase === "military_resolve" ? (
-              <ActionButton onClick={handleResolveMilitary}>Résoudre la pression</ActionButton>
-            ) : null}
+  <ActionButton
+    onClick={handleResolveMilitary}
+    disabled={militaryResolutionDoneThisPhase}
+  >
+    {militaryResolutionDoneThisPhase ? "Résolution faite" : "Résoudre la pression"}
+  </ActionButton>
+) : null}
 
             {phase === "production" ? (
               <ActionButton onClick={handleProduce} disabled={productionDoneThisPhase}>
@@ -1937,7 +2085,7 @@ if (appPhase === "setup") {
               </ActionButton>
             ) : null}
 
-            <ActionButton onClick={handleMainAction}>{getPhaseActionLabel(phase, activePlayer)}</ActionButton>
+            <ActionButton onClick={handleMainAction}>{getPhaseActionLabel(phase, activePlayer, buyPasses, economyPasses, localPlayer)}</ActionButton>
             <ActionButton onClick={handleResetGame} disabled={Boolean(currentRoomId && (rematchPending || roomPlayerCount < 2))}>{resetButtonLabel}</ActionButton>
           </div>
 
@@ -1987,6 +2135,23 @@ if (appPhase === "setup") {
   />
 ) : null}
 
+          {pendingDirectionUnitId ? (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 980,
+                background: "#111827",
+                border: "1px solid rgba(251, 191, 36, 0.45)",
+                borderRadius: 14,
+                padding: 12,
+                color: "#fde68a",
+                fontWeight: 700,
+              }}
+            >
+              Orientation requise : choisis la direction de ton archer avant toute autre action.
+            </div>
+          ) : null}
+
           {selectedUnit && (selectedUnit.type === "archer" || selectedUnit.type === "siege") ? (
             <div
               style={{
@@ -2021,6 +2186,31 @@ if (appPhase === "setup") {
             <EraCardPanel title="Carte Événement active" card={activeEventCard} accent="rgba(59, 130, 246, 0.35)" />
           </div>
 
+{phase === "buy" ? (
+  <div
+    style={{
+      width: "100%",
+      maxWidth: 980,
+      background: "#111827",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 14,
+      padding: 12,
+      display: "flex",
+      gap: 16,
+      justifyContent: "center",
+      flexWrap: "wrap",
+      fontWeight: 700,
+      marginTop: 12,
+    }}
+  >
+    <div>J1 : {buyPasses?.player1 ? "✅ passé" : "⏳ en cours"}</div>
+    <div>J2 : {buyPasses?.player2 ? "✅ passé" : "⏳ en cours"}</div>
+  </div>
+) : null}
+
+
+
+
           <EconomyCompactPanel
             phase={phase}
             activePlayer={activePlayer}
@@ -2032,6 +2222,28 @@ if (appPhase === "setup") {
             onSelectEconomyMarket={handleSelectEconomyMarket}
             onConvertResources={handleConvertResources}
           />
+
+          {phase === "economy" ? (
+  <div
+    style={{
+      width: "100%",
+      maxWidth: 980,
+      background: "#111827",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 14,
+      padding: 12,
+      display: "flex",
+      gap: 16,
+      justifyContent: "center",
+      flexWrap: "wrap",
+      fontWeight: 700,
+      marginTop: 12,
+    }}
+  >
+    <div>J1 : {economyPasses?.player1 ? "✅ passé" : "⏳ en cours"}</div>
+    <div>J2 : {economyPasses?.player2 ? "✅ passé" : "⏳ en cours"}</div>
+  </div>
+) : null}
 
           <ScienceCompactPanel
             phase={phase}
@@ -2094,7 +2306,10 @@ if (appPhase === "setup") {
         </div>
       </div>
 
-      <SciencePeekModal sciencePeek={sciencePeek} onClose={handleCloseSciencePeek} />
+      <SciencePeekModal
+  sciencePeek={displayedSciencePeek}
+  onClose={handleCloseSciencePeek}
+/>
     </div>
   );
 }
