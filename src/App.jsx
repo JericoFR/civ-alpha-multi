@@ -19,10 +19,88 @@ import { canMoveTo, getReachableCells, isMilitaryUnit } from "./logic/movement";
 import { getValidBuildingPlacements, getValidWorkerSpawnCells, getValidMilitarySpawnCells } from "./logic/buildings";
 import { buildPressureMap } from "./logic/pressure";
 import { gameReducer } from "./state/gameReducer";
-import { getPhaseDefinition, initialState } from "./state/initialState";
+import { createInitialState, getPhaseDefinition, initialState } from "./state/initialState";
 
 const TURNS_PER_ERA = 10;
 const TOTAL_ERAS = 4;
+
+const SETUP_STEPS = [
+  { player: 1, type: "worker", label: "J1 place son 1er ouvrier" },
+  { player: 2, type: "worker", label: "J2 place son 1er ouvrier" },
+  { player: 2, type: "soldier", label: "J2 place son 1er soldat" },
+  { player: 1, type: "soldier", label: "J1 place son 1er soldat" },
+];
+
+function createEmptySetupState() {
+  return {
+    step: 0,
+    placements: {
+      player1: { worker: null, soldier: null },
+      player2: { worker: null, soldier: null },
+    },
+  };
+}
+
+function getBuildingCells(building) {
+  const cells = [];
+  const size = building.size ?? 2;
+
+  for (let i = 0; i < size; i += 1) {
+    if (building.orientation === "horizontal") {
+      cells.push({ x: building.x + i, y: building.y });
+    } else {
+      cells.push({ x: building.x, y: building.y + i });
+    }
+  }
+
+  return cells;
+}
+
+function getSetupSpawnCells(buildings, player) {
+  return buildings
+    .filter(
+      (building) =>
+        building.player === player &&
+        (building.type === "townhall" || building.type === "house")
+    )
+    .flatMap((building) => getBuildingCells(building));
+}
+
+function getSetupPreviewUnits(setupState) {
+  if (!setupState) return [];
+
+  const units = [];
+  const placements = setupState.placements ?? {};
+
+  if (placements.player1?.worker) {
+    units.push({ id: "setup-p1-worker", type: "worker", player: 1, ...placements.player1.worker });
+  }
+  if (placements.player2?.worker) {
+    units.push({ id: "setup-p2-worker", type: "worker", player: 2, ...placements.player2.worker });
+  }
+  if (placements.player2?.soldier) {
+    units.push({ id: "setup-p2-soldier", type: "soldier", player: 2, ...placements.player2.soldier });
+  }
+  if (placements.player1?.soldier) {
+    units.push({ id: "setup-p1-soldier", type: "soldier", player: 1, ...placements.player1.soldier });
+  }
+
+  return units;
+}
+
+function buildGameStateFromSetup(setupState) {
+  const nextState = createInitialState();
+  const placements = setupState?.placements ?? createEmptySetupState().placements;
+
+  nextState.units = [
+    { id: "p1_worker", type: "worker", player: 1, ...(placements.player1.worker ?? { x: 6, y: 2 }) },
+    { id: "p2_worker", type: "worker", player: 2, ...(placements.player2.worker ?? { x: 6, y: 16 }) },
+    { id: "p2_soldier", type: "soldier", player: 2, ...(placements.player2.soldier ?? { x: 6, y: 16 }) },
+    { id: "p1_soldier", type: "soldier", player: 1, ...(placements.player1.soldier ?? { x: 6, y: 2 }) },
+  ];
+
+  return nextState;
+}
 
 function ActionButton({ children, onClick, disabled = false }) {
   return (
@@ -725,6 +803,122 @@ function RoomPanel({
   );
 }
 
+function HomePanel({ onStartSolo, onStartMulti }) {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0f172a",
+        color: "white",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "min(720px, 100%)",
+          background: "#111827",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 18,
+          padding: 24,
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
+          textAlign: "center",
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 36 }}>Civ Alpha — v0.6 Setup</h1>
+        <div style={{ fontSize: 15, opacity: 0.8 }}>
+          Choisis ton mode. En multi : room → lobby → setup → partie. En solo : setup local puis partie.
+        </div>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <ActionButton onClick={onStartSolo}>Solo</ActionButton>
+          <ActionButton onClick={onStartMulti}>Multi</ActionButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SetupPanel({
+  setupState,
+  localPlayer,
+  isMultiplayer,
+  roomMessage,
+  setupSpawnCells,
+  previewBuildings,
+  previewUnits,
+  onBack,
+  onCellClick,
+}) {
+  const currentStep = SETUP_STEPS[setupState?.step] ?? null;
+  const canAct = !isMultiplayer || (currentStep && currentStep.player === localPlayer);
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0f172a",
+        color: "white",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          background: "#111827",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 16,
+          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          alignItems: "center",
+        }}
+      >
+        <h2 style={{ margin: 0 }}>Setup initial</h2>
+        <div style={{ fontSize: 15, opacity: 0.82 }}>
+          {currentStep ? currentStep.label : "Setup terminé"}
+        </div>
+        <div style={{ fontSize: 13, opacity: 0.7 }}>
+          Spawn autorisés : Hôtel de Ville et Maisons. Open info total.
+        </div>
+        <div style={{ fontSize: 13, opacity: 0.8 }}>
+          {isMultiplayer
+            ? canAct
+              ? `À toi de placer (${currentStep?.type ?? "-"})`
+              : `En attente de J${currentStep?.player ?? "-"}.`
+            : "Mode solo hotseat : clique les cases dans l'ordre imposé."}
+        </div>
+        {roomMessage ? <div style={{ fontSize: 12, opacity: 0.72 }}>{roomMessage}</div> : null}
+        <ActionButton onClick={onBack}>Retour</ActionButton>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <Board
+          units={previewUnits}
+          buildings={previewBuildings}
+          selectedUnitId={null}
+          reachableCells={[]}
+          activatedUnitIds={[]}
+          activePlayer={currentStep?.player ?? null}
+          phase="setup"
+          pressureMap={{}}
+          showPressure={false}
+          placementCells={[]}
+          spawnCells={setupSpawnCells}
+          onCellClick={onCellClick}
+          onUnitClick={() => {}}
+        />
+      </div>
+    </div>
+  );
+}
+
 function appStateReducer(state, action) {
   if (action?.type === "HYDRATE_STATE") {
     return {
@@ -770,12 +964,22 @@ export default function App() {
   const [roomMessage, setRoomMessage] = useState("");
   const [roomPlayerCount, setRoomPlayerCount] = useState(0);
   const [localPlayer, setLocalPlayer] = useState(null);
+  const [appPhase, setAppPhase] = useState("home");
+  const [setupState, setSetupState] = useState(createEmptySetupState());
+  const [gameMode, setGameMode] = useState(null);
+  const [rematchPending, setRematchPending] = useState(false);
+  const [rematchRequest, setRematchRequest] = useState(null);
 
   const currentRoomIdRef = useRef("");
+  const localPlayerRef = useRef(null);
 
   useEffect(() => {
     currentRoomIdRef.current = currentRoomId;
   }, [currentRoomId]);
+
+  useEffect(() => {
+    localPlayerRef.current = localPlayer;
+  }, [localPlayer]);
 
   function applyAction(action) {
     if (currentRoomIdRef.current) {
@@ -802,33 +1006,91 @@ export default function App() {
       setCurrentRoomId("");
       setRoomPlayerCount(0);
       setLocalPlayer(null);
+      setRematchPending(false);
+      setRematchRequest(null);
       setRoomMessage("Déconnecté du serveur.");
     }
 
     function hydrateFromRoom(data, fallbackMessage) {
-      setCurrentRoomId(data.roomId);
-      setRoomPlayerCount(data.players?.length ?? 0);
-      setRoomCodeInput(data.roomId ?? "");
-      if (data.playerNumber) {
-        setLocalPlayer(data.playerNumber);
-      }
-      setRoomMessage(fallbackMessage);
+  setCurrentRoomId(data.roomId);
+  setRoomPlayerCount(data.players?.length ?? 0);
+  setRoomCodeInput(data.roomId ?? "");
+  setGameMode("multi");
+  setAppPhase(
+    data.roomPhase === "setup"
+      ? "setup"
+      : data.roomPhase === "game"
+      ? "game"
+      : "lobby"
+  );
+  setSetupState(data.setup ?? createEmptySetupState());
+  setRematchPending(false);
+  setRematchRequest(null);
 
-      if (data.gameState) {
-        dispatch({ type: "HYDRATE_STATE", payload: data.gameState });
-      }
-    }
+  if (data.playerNumber) {
+    setLocalPlayer(data.playerNumber);
+  }
 
-    function handleRoomCreated(data) {
-      hydrateFromRoom(data, `Room créée : ${data.roomId} | Tu es J${data.playerNumber ?? 1}`);
-    }
+  setRoomMessage(fallbackMessage);
 
-    function handleRoomJoined(data) {
-      hydrateFromRoom(
-        data,
-        `Room rejointe : ${data.roomId} (${data.players?.length ?? 0}/2 joueurs)${data.playerNumber ? ` | Tu es J${data.playerNumber}` : ""}`
-      );
-    }
+  if (data.gameState) {
+    dispatch({ type: "HYDRATE_STATE", payload: data.gameState });
+  }
+}
+
+function handleRoomCreated(data) {
+  hydrateFromRoom(data, `Room créée : ${data.roomId} | Tu es J${data.playerNumber ?? 1}`);
+}
+
+function handleRoomJoined(data) {
+  hydrateFromRoom(
+    data,
+    `Room rejointe : ${data.roomId} (${data.players?.length ?? 0}/2 joueurs)${
+      data.playerNumber ? ` | Tu es J${data.playerNumber}` : ""
+    }`
+  );
+}
+
+function handleSetupUpdate(serverSetup) {
+  setSetupState(serverSetup ?? createEmptySetupState());
+  setRematchPending(false);
+  setRematchRequest(null);
+  setAppPhase("setup");
+}
+
+function handleGameStart(serverState) {
+  if (!serverState) return;
+  dispatch({ type: "HYDRATE_STATE", payload: serverState });
+  setRematchPending(false);
+  setRematchRequest(null);
+  setAppPhase("game");
+  setRoomMessage("Partie lancée.");
+}
+
+function handleReturnToLobby(payload) {
+  setSetupState(payload?.setup ?? createEmptySetupState());
+  setRoomPlayerCount(payload?.players?.length ?? 0);
+  setRematchPending(false);
+  setRematchRequest(null);
+  setAppPhase("lobby");
+  setRoomMessage(payload?.message ?? "Retour au lobby.");
+}
+
+function handleRematchRequest(payload) {
+  setRematchPending(false);
+  setRematchRequest(payload ?? { requestedBy: "adversaire" });
+  setRoomMessage(
+    payload?.requestedBy
+      ? `J${payload.requestedBy} te propose une revanche.`
+      : "Ton adversaire te propose une revanche."
+  );
+}
+
+function handleRematchDeclined(payload) {
+  setRematchPending(false);
+  setRematchRequest(null);
+  setRoomMessage(payload?.message ?? "Revanche refusée.");
+}
 
     function handleRoomUpdate({ roomId, players }) {
       if (roomId === currentRoomIdRef.current || !currentRoomIdRef.current) {
@@ -859,6 +1121,31 @@ export default function App() {
     socket.on("roomUpdate", handleRoomUpdate);
     socket.on("GAME_STATE", handleGameState);
     socket.on("errorMessage", handleErrorMessage);
+    socket.on("SETUP_UPDATE", handleSetupUpdate);
+    socket.on("GAME_START", handleGameStart);
+    socket.on("RETURN_TO_LOBBY", handleReturnToLobby);
+    socket.on("REMATCH_REQUESTED", handleRematchRequest);
+socket.on("REMATCH_PENDING", () => {
+  setRematchPending(true);
+  setRematchRequest(null);
+  setRoomMessage("Demande de revanche envoyée. En attente de la réponse adverse.");
+});
+
+socket.on("REMATCH_DECLINED", (payload) => {
+  setRematchPending(false);
+  setRematchRequest(null);
+  setRoomMessage(payload?.message ?? "Revanche refusée.");
+});
+
+socket.on("REMATCH_ACCEPTED", () => {
+  setRematchPending(false);
+  setRematchRequest(null);
+  setRoomMessage("Revanche acceptée.");
+});
+
+socket.on("REMATCH_ACCEPTED_WAITING", () => {
+  setRoomMessage("Revanche acceptée de ton côté. En attente de l’autre joueur.");
+});
 
     return () => {
       socket.off("connect", handleConnect);
@@ -868,6 +1155,14 @@ export default function App() {
       socket.off("roomUpdate", handleRoomUpdate);
       socket.off("GAME_STATE", handleGameState);
       socket.off("errorMessage", handleErrorMessage);
+      socket.off("SETUP_UPDATE", handleSetupUpdate);
+      socket.off("GAME_START", handleGameStart);
+      socket.off("RETURN_TO_LOBBY", handleReturnToLobby);
+      socket.off("REMATCH_REQUESTED", handleRematchRequest);
+      socket.off("REMATCH_PENDING");
+      socket.off("REMATCH_DECLINED");
+      socket.off("REMATCH_ACCEPTED");
+      socket.off("REMATCH_ACCEPTED_WAITING");
       socket.disconnect();
     };
   }, []);
@@ -975,6 +1270,21 @@ export default function App() {
     return [];
   }, [purchaseMode, workerSpawnCells, militarySpawnCells]);
 
+  const previewBuildings = useMemo(() => createInitialState().buildings, []);
+const previewUnits = useMemo(() => getSetupPreviewUnits(setupState), [setupState]);
+const currentSetupStep = SETUP_STEPS[setupState?.step] ?? null;
+
+const setupSpawnCells = useMemo(
+  () => (currentSetupStep ? getSetupSpawnCells(previewBuildings, currentSetupStep.player) : []),
+  [previewBuildings, currentSetupStep]
+);
+
+  const resetButtonLabel = currentRoomId
+    ? rematchPending
+      ? "Revanche envoyée"
+      : "Proposer revanche"
+    : "Retour setup";
+
   function handleCreateRoom() {
     if (!isSocketConnected) {
       setRoomMessage("Pas connecté au serveur.");
@@ -998,6 +1308,76 @@ export default function App() {
 
     socket.emit("joinRoom", cleaned);
   }
+
+  function handleStartSolo() {
+  setGameMode("solo");
+  setCurrentRoomId("");
+  setLocalPlayer(null);
+  setRoomPlayerCount(0);
+  setSetupState(createEmptySetupState());
+  setRoomMessage("Mode solo — place les 4 unités de départ.");
+  setAppPhase("setup");
+}
+
+function handleStartMulti() {
+  setGameMode("multi");
+  setAppPhase("lobby");
+  setRoomMessage("Crée ou rejoins une room.");
+}
+
+function handleBackToHome() {
+  setGameMode(null);
+  setAppPhase("home");
+  setCurrentRoomId("");
+  setRoomCodeInput("");
+  setRoomPlayerCount(0);
+  setLocalPlayer(null);
+  setSetupState(createEmptySetupState());
+  setRematchPending(false);
+  setRematchRequest(null);
+  setRoomMessage("");
+}
+
+function handleBackToLobby() {
+  setAppPhase("lobby");
+  setSetupState(createEmptySetupState());
+  setRematchPending(false);
+  setRematchRequest(null);
+}
+
+function handleStartSetup() {
+  if (!currentRoomIdRef.current) {
+    setAppPhase("setup");
+    return;
+  }
+
+  socket.emit("START_SETUP", { roomId: currentRoomIdRef.current });
+}
+
+function handleSetupPlacement(x, y) {
+  const currentStep = SETUP_STEPS[setupState?.step] ?? null;
+  if (!currentStep) return;
+
+  if (currentRoomIdRef.current) {
+    socket.emit("SETUP_ACTION", {
+      roomId: currentRoomIdRef.current,
+      payload: { x, y },
+    });
+    return;
+  }
+
+  const nextSetup = structuredClone(setupState ?? createEmptySetupState());
+  nextSetup.placements[`player${currentStep.player}`][currentStep.type] = { x, y };
+  nextSetup.step += 1;
+  setSetupState(nextSetup);
+
+  if (nextSetup.step >= SETUP_STEPS.length) {
+    const nextGameState = buildGameStateFromSetup(nextSetup);
+    dispatch({ type: "HYDRATE_STATE", payload: nextGameState });
+    setAppPhase("game");
+    setRoomMessage("Partie locale lancée.");
+  }
+}
 
   function handleSelectCard(player, cardKey) {
     applyAction({ type: "SELECT_CARD", player: localPlayer, payload: { player, cardKey } });
@@ -1211,13 +1591,145 @@ export default function App() {
 
   function handleResetGame() {
     if (currentRoomId) {
-      socket.emit("errorMessage", "Le reset multi n'est pas branché dans cette version. Quitte la room ou recharge les deux clients si besoin.");
+      if (!localPlayer) {
+        setRoomMessage("Impossible de proposer une revanche : joueur local introuvable.");
+        return;
+      }
+
+      if (rematchPending) {
+        setRoomMessage("Une demande de revanche est déjà en attente.");
+        return;
+      }
+
+      socket.emit("REQUEST_REMATCH", { roomId: currentRoomId });
       return;
     }
 
     dispatch({ type: "RESET_GAME" });
+    setSetupState(createEmptySetupState());
     setShowPressure(true);
+    setRoomMessage("Nouvelle partie locale : replace les 4 unités de départ.");
+    setAppPhase("setup");
   }
+
+  function handleAcceptRematch() {
+  if (!currentRoomId || !rematchRequest) return;
+
+  // 🔥 AJOUT ICI
+  setRematchPending(true);
+  setRematchRequest(null);
+
+  socket.emit("RESPOND_REMATCH", {
+    roomId: currentRoomId,
+    accept: true,
+  });
+}
+
+  function handleDeclineRematch() {
+    if (!currentRoomId || !rematchRequest) return;
+
+    socket.emit("RESPOND_REMATCH", {
+      roomId: currentRoomId,
+      accept: false,
+    });
+  }
+
+if (appPhase === "home") {
+  return <HomePanel onStartSolo={handleStartSolo} onStartMulti={handleStartMulti} />;
+}
+
+if (appPhase === "lobby") {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0f172a",
+        color: "white",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "min(760px, 100%)",
+          background: "#111827",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 18,
+          padding: 24,
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+        }}
+      >
+        <h1 style={{ margin: 0, textAlign: "center" }}>Lobby</h1>
+        <div style={{ fontSize: 14, opacity: 0.78, textAlign: "center" }}>
+          Mode multi — crée ou rejoins une room, puis lance le setup quand vous êtes 2.
+        </div>
+
+        <div
+          style={{
+            padding: 8,
+            background: isSocketConnected ? "#14532d" : "#7f1d1d",
+            color: "white",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            textAlign: "center",
+          }}
+        >
+          Réseau : {isSocketConnected ? "Connecté" : "Déconnecté"}
+          {socketId ? ` — ${socketId}` : ""}
+        </div>
+
+        <RoomPanel
+          isSocketConnected={isSocketConnected}
+          socketId={socketId}
+          roomCodeInput={roomCodeInput}
+          setRoomCodeInput={setRoomCodeInput}
+          currentRoomId={currentRoomId}
+          roomMessage={roomMessage}
+          roomPlayerCount={roomPlayerCount}
+          localPlayer={localPlayer}
+          handleCreateRoom={handleCreateRoom}
+          handleJoinRoom={handleJoinRoom}
+        />
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <ActionButton onClick={handleBackToHome}>Accueil</ActionButton>
+          <ActionButton
+            onClick={handleStartSetup}
+            disabled={!currentRoomId || roomPlayerCount < 2 || localPlayer !== 1}
+          >
+            Lancer le setup
+          </ActionButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+if (appPhase === "setup") {
+  return (
+    <SetupPanel
+      setupState={setupState}
+      localPlayer={localPlayer}
+      isMultiplayer={Boolean(currentRoomId)}
+      roomMessage={roomMessage}
+      setupSpawnCells={setupSpawnCells}
+      previewBuildings={previewBuildings}
+      previewUnits={previewUnits}
+      onBack={currentRoomId ? handleBackToLobby : handleBackToHome}
+      onCellClick={(x, y) => {
+        const isValid = setupSpawnCells.some((cell) => cell.x === x && cell.y === y);
+        if (!isValid) return;
+        if (currentRoomId && currentSetupStep?.player !== localPlayer) return;
+        handleSetupPlacement(x, y);
+      }}
+    />
+  );
+}
 
   return (
     <div
@@ -1378,8 +1890,43 @@ export default function App() {
             ) : null}
 
             <ActionButton onClick={handleMainAction}>{getPhaseActionLabel(phase, activePlayer)}</ActionButton>
-            <ActionButton onClick={handleResetGame}>Nouvelle partie</ActionButton>
+            <ActionButton onClick={handleResetGame} disabled={Boolean(currentRoomId && (rematchPending || roomPlayerCount < 2))}>{resetButtonLabel}</ActionButton>
           </div>
+
+          {currentRoomId && (rematchRequest || rematchPending) ? (
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 980,
+                background: "#111827",
+                border: "1px solid rgba(250, 204, 21, 0.35)",
+                borderRadius: 14,
+                padding: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>Revanche</div>
+
+              {rematchRequest ? (
+                <>
+                  <div style={{ fontSize: 13, opacity: 0.82 }}>
+                    J{rematchRequest.requestedBy} veut relancer une partie. Si tu acceptes :
+                    retour lobby puis nouveau setup.
+                  </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <ActionButton onClick={handleAcceptRematch}>Accepter</ActionButton>
+                    <ActionButton onClick={handleDeclineRematch}>Refuser</ActionButton>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, opacity: 0.82 }}>
+                  Demande envoyée. En attente de la réponse adverse.
+                </div>
+              )}
+            </div>
+          ) : null}
 
           {phase === "buy" ? (
             <PurchasePanel
