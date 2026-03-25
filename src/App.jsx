@@ -323,7 +323,15 @@ function EraCardPanel({ title, card, accent }) {
   );
 }
 
-function PurchasePanel({ resources, purchaseMode, purchasePlayer, onSetPurchaseMode, activeEventCard }) {
+function PurchasePanel({
+  resources,
+  buildings,
+  units,
+  purchaseMode,
+  purchasePlayer,
+  onSetPurchaseMode,
+  activeEventCard,
+}) {
   const workerFoodCost = getWorkerFoodCost(activeEventCard);
 
   function getPlayerResources(player) {
@@ -1946,14 +1954,16 @@ if (appPhase === "setup") {
           ) : null}
 
           {phase === "buy" ? (
-            <PurchasePanel
-              resources={resources}
-              purchaseMode={purchaseMode}
-              purchasePlayer={purchasePlayer}
-              onSetPurchaseMode={handleSetPurchaseMode}
-              activeEventCard={activeEventCard}
-            />
-          ) : null}
+  <PurchasePanel
+    resources={resources}
+    buildings={buildings}
+    units={units}
+    purchaseMode={purchaseMode}
+    purchasePlayer={purchasePlayer}
+    onSetPurchaseMode={handleSetPurchaseMode}
+    activeEventCard={activeEventCard}
+  />
+) : null}
 
           {selectedUnit && (selectedUnit.type === "archer" || selectedUnit.type === "siege") ? (
             <div
