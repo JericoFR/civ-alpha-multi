@@ -1912,8 +1912,7 @@ if (appPhase === "setup") {
               {rematchRequest ? (
                 <>
                   <div style={{ fontSize: 13, opacity: 0.82 }}>
-                    J{rematchRequest.requestedBy} veut relancer une partie. Si tu acceptes :
-                    retour lobby puis nouveau setup.
+                    Ton adversaire propose une revanche. Si tu acceptes : retour au lobby puis nouveau setup.
                   </div>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <ActionButton onClick={handleAcceptRematch}>Accepter</ActionButton>
