@@ -83,6 +83,8 @@ export default function DeckBuilder({ onBack, onUseDeck }) {
   const [showOnlyInDeck, setShowOnlyInDeck] = useState(false);
   const [statusText, setStatusText] = useState("Deck builder prêt.");
   const [imageErrors, setImageErrors] = useState({});
+  const [hoveredCardId, setHoveredCardId] = useState(null);
+  const [hoveredDeckCardId, setHoveredDeckCardId] = useState(null);
 
   const allCards = useMemo(() => normalizeCardList(), []);
   const deckEntries = useMemo(() => getDeckEntries(deck, allCards), [deck, allCards]);
@@ -552,6 +554,8 @@ function validateImportedDeck(data) {
               return (
                 <div
                   key={card.id}
+                  onMouseEnter={() => setHoveredCardId(card.id)}
+                  onMouseLeave={() => setHoveredCardId((current) => (current === card.id ? null : current))}
                   style={{
                     background: "#172036",
                     border: "1px solid rgba(255,255,255,0.08)",
@@ -561,6 +565,13 @@ function validateImportedDeck(data) {
                     flexDirection: "column",
                     gap: 10,
                     minHeight: 280,
+                    overflow: "visible",
+                    transform: hoveredCardId === card.id ? "scale(1.12)" : "scale(1)",
+                    transformOrigin: "center center",
+                    transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+                    zIndex: hoveredCardId === card.id ? 20 : 1,
+                    boxShadow: hoveredCardId === card.id ? "0 22px 40px rgba(0,0,0,0.35)" : "none",
+                    position: "relative",
                   }}
                 >
                   <div
@@ -665,6 +676,7 @@ function validateImportedDeck(data) {
               flexDirection: "column",
               gap: 10,
               paddingRight: 4,
+              overflowX: "visible",
             }}
           >
             {deckEntries.length === 0 ? (
@@ -673,6 +685,8 @@ function validateImportedDeck(data) {
               deckEntries.map(({ cardId, qty, card }) => (
                 <div
                   key={cardId}
+                  onMouseEnter={() => setHoveredDeckCardId(cardId)}
+                  onMouseLeave={() => setHoveredDeckCardId((current) => (current === cardId ? null : current))}
                   style={{
                     background: "#172036",
                     border: "1px solid rgba(255,255,255,0.08)",
@@ -681,6 +695,13 @@ function validateImportedDeck(data) {
                     display: "flex",
                     flexDirection: "column",
                     gap: 8,
+                    overflow: "visible",
+                    transform: hoveredDeckCardId === cardId ? "scale(1.06)" : "scale(1)",
+                    transformOrigin: "left center",
+                    transition: "transform 160ms ease, box-shadow 160ms ease",
+                    zIndex: hoveredDeckCardId === cardId ? 20 : 1,
+                    boxShadow: hoveredDeckCardId === cardId ? "0 18px 30px rgba(0,0,0,0.28)" : "none",
+                    position: "relative",
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>

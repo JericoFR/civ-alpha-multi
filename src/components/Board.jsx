@@ -1,12 +1,14 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BOARD, CELL_COLORS } from "../data/board";
 import { UNIT_DEFS } from "../data/units";
+import { getBuildingImageCandidates } from "../data/cards";
 import { makeCellKey, isMilitaryUnit } from "../logic/movement";
 import { normalizeBuildingCells } from "../logic/buildings";
 
 const CELL_SIZE = 56;
 const GRID_GAP = 1;
 const GRID_PADDING = 10;
+
 
 function buildUnitsByCell(units) {
   const map = new Map();
@@ -155,6 +157,156 @@ function getBuildingRect(building) {
   };
 }
 
+function buildingContainsCell(building, x, y) {
+  const cells = normalizeBuildingCells(building);
+  return cells.some((cell) => cell.x === x && cell.y === y);
+}
+
+function getBuildingImageTransform(building) {
+  if (building.orientation === "horizontal") {
+    return "rotate(90deg) scale(1.35)";
+  }
+
+  return "scale(1.06)";
+}
+
+function BuildingVisual({ building }) {
+  const [imageIndex, setImageIndex] = useState(0);
+  const imageCandidates = building.imageCandidates ?? [];
+  const currentImage = imageCandidates[imageIndex] ?? null;
+  const showImage = Boolean(currentImage) && !building.isBurning;
+
+    return (
+    <div
+  style={{
+  position: "absolute",
+  left: building.rect.left,
+  top: building.rect.top,
+  zIndex: 1,
+  pointerEvents: "none",
+  width: building.rect.width,
+  height: building.rect.height,
+        borderRadius: 12,
+        border: building.isBurning ? "3px solid #fb923c" : `3px solid ${building.colors.border}`,
+        background: showImage
+          ? "linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.28) 100%)"
+          : building.isBurning
+          ? "linear-gradient(180deg, rgba(127,29,29,0.8) 0%, rgba(234,88,12,0.6) 100%)"
+          : building.colors.fill,
+        boxShadow: building.isBurning
+          ? "0 0 16px rgba(249, 115, 22, 0.75), inset 0 0 16px rgba(239, 68, 68, 0.35)"
+          : showImage
+          ? `0 10px 18px ${building.colors.shadow}, inset 0 0 0 1px rgba(255,255,255,0.12)`
+          : `0 10px 18px ${building.colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.25)`,
+        opacity: building.isActive === false && !building.isBurning ? 0.72 : 1,
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {showImage ? (
+        <img
+          src={currentImage}
+          alt={building.type}
+          draggable={false}
+          onError={() => {
+            if (imageIndex < imageCandidates.length - 1) {
+              setImageIndex((prev) => prev + 1);
+            } else {
+              setImageIndex(imageCandidates.length);
+            }
+          }}
+style={{pointerEvents: "none",
+  position: "absolute",
+  left: "50%",
+  top: "50%",
+  width: "100%",
+  height: "100%",
+  padding: 4,
+  boxSizing: "border-box",
+  transform: "translate(-50%, -50%) scale(1.1)",
+  zIndex: 1,
+  objectFit: "cover",
+  objectPosition: "center 40%",
+  userSelect: "none",
+  pointerEvents: "none",
+  filter: building.player === 2 ? "saturate(0.95) brightness(0.94)" : "none",
+}}
+/>
+      ) : null}
+
+      <div
+  style={{
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    background: building.isBurning
+      ? "linear-gradient(180deg, rgba(127,29,29,0.22) 0%, rgba(249,115,22,0.38) 100%)"
+      : showImage
+      ? "linear-gradient(180deg, rgba(15,23,42,0.12) 0%, rgba(15,23,42,0.34) 100%)"
+      : "linear-gradient(135deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 50%)",
+  }}
+/>
+
+      <div
+        style={{pointerEvents: "none",
+          position: "absolute",
+          top: 5,
+          left: 5,
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: building.player === 1 ? "rgba(30,64,175,0.95)" : "rgba(153,27,27,0.95)",
+          color: "white",
+          fontSize: 10,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 0 0 2px rgba(255,255,255,0.22)",
+          zIndex: 2,
+        }}
+      >
+        {building.player}
+      </div>
+
+      {building.isBurning ? (
+        <div
+          style={{pointerEvents: "none",
+            position: "absolute",
+            right: 6,
+            top: 4,
+            fontSize: 16,
+            zIndex: 2,
+            textShadow: "0 1px 3px rgba(0,0,0,0.65)",
+          }}
+        >
+          🔥
+        </div>
+      ) : null}
+
+      {!showImage ? (
+        <div
+          style={{pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            color: building.type === "production_stone" ? "#111827" : "white",
+            fontSize: Math.min(building.rect.width, building.rect.height) > 64 ? 28 : 24,
+            fontWeight: 800,
+            textShadow: "0 1px 2px rgba(0,0,0,0.25)",
+            zIndex: 1,
+          }}
+        >
+          <span>{building.label}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Board({
   units,
   buildings,
@@ -172,6 +324,32 @@ export default function Board({
 }) {
   const width = BOARD[0].length;
 
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+  const [hoveredBuilding, setHoveredBuilding] = useState(null);
+  const [hoveredCell, setHoveredCell] = useState(null);
+
+    useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Shift") {
+        setIsShiftPressed(true);
+      }
+    };
+
+    const handleKeyUp = (event) => {
+      if (event.key === "Shift") {
+        setIsShiftPressed(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
   const unitsByCell = useMemo(() => buildUnitsByCell(units), [units]);
 
   const reachableSet = useMemo(() => {
@@ -188,8 +366,27 @@ export default function Board({
       rect: getBuildingRect(building),
       colors: getBuildingColor(building.type),
       label: getBuildingLabel(building.type),
+      imageCandidates: getBuildingImageCandidates(building),
     }));
   }, [buildings]);
+
+  function getBuildingAtCell(x, y) {
+  return buildingRects.find((building) => buildingContainsCell(building, x, y)) ?? null;
+}
+
+    useEffect(() => {
+  if (!isShiftPressed) {
+    setHoveredBuilding(null);
+    return;
+  }
+
+  if (!hoveredCell) {
+    setHoveredBuilding(null);
+    return;
+  }
+
+  setHoveredBuilding(getBuildingAtCell(hoveredCell.x, hoveredCell.y));
+}, [isShiftPressed, hoveredCell, buildingRects]);
 
   return (
     <div
@@ -213,6 +410,10 @@ export default function Board({
         {BOARD.map((row, y) =>
           row.map((cell, x) => {
             const key = `${x},${y}`;
+            const hoveredBuildingFromCell =
+  isShiftPressed
+    ? buildingRects.find((building) => buildingContainsCell(building, x, y)) ?? null
+    : null;
             const cellUnits = unitsByCell.get(key) || [];
             const isReachable = reachableSet.has(key);
             const pressureEntry = pressureMap[key];
@@ -223,9 +424,23 @@ export default function Board({
 
             return (
               <div
-                key={key}
-                onClick={() => onCellClick(x, y)}
-                style={{
+  key={key}
+  onClick={() => onCellClick(x, y)}
+  onMouseMove={() => {
+    setHoveredCell((prev) => {
+      if (prev && prev.x === x && prev.y === y) return prev;
+      return { x, y };
+    });
+
+    if (isShiftPressed) {
+      setHoveredBuilding(hoveredBuildingFromCell);
+    }
+  }}
+  onMouseLeave={() => {
+    setHoveredCell(null);
+    setHoveredBuilding(null);
+  }}
+  style={{
                   width: CELL_SIZE,
                   height: CELL_SIZE,
                   background: isGreenSlot ? "#22c55e" : CELL_COLORS[cell],
@@ -334,85 +549,49 @@ export default function Board({
         )}
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 2,
-        }}
-      >
+            <div
+  style={{
+    position: "absolute",
+    inset: 0,
+    zIndex: 2,
+    pointerEvents: "none",
+  }}
+>
         {buildingRects.map((building) => (
-          <div
-            key={building.id}
-            style={{
-              position: "absolute",
-              left: building.rect.left,
-              top: building.rect.top,
-              width: building.rect.width,
-              height: building.rect.height,
-              borderRadius: 12,
-              border: building.isBurning ? "3px solid #fb923c" : `3px solid ${building.colors.border}`,
-              background: building.isBurning
-                ? "linear-gradient(180deg, rgba(127,29,29,0.8) 0%, rgba(234,88,12,0.6) 100%)"
-                : building.colors.fill,
-              boxShadow: building.isBurning
-                ? "0 0 16px rgba(249, 115, 22, 0.75), inset 0 0 16px rgba(239, 68, 68, 0.35)"
-                : `0 10px 18px ${building.colors.shadow}, inset 0 1px 0 rgba(255,255,255,0.25)`,
-              opacity: building.isActive === false && !building.isBurning ? 0.72 : 1,
-              overflow: "hidden",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "linear-gradient(135deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 50%)",
-              }}
-            />
-
-            <div
-              style={{
-                position: "absolute",
-                top: 5,
-                left: 5,
-                width: 18,
-                height: 18,
-                borderRadius: 999,
-                background: building.player === 1 ? "rgba(30,64,175,0.95)" : "rgba(153,27,27,0.95)",
-                color: "white",
-                fontSize: 10,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 0 0 2px rgba(255,255,255,0.22)",
-              }}
-            >
-              {building.player}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                color: building.type === "production_stone" ? "#111827" : "white",
-                fontSize: Math.min(building.rect.width, building.rect.height) > 64 ? 28 : 24,
-                fontWeight: 800,
-                textShadow: "0 1px 2px rgba(0,0,0,0.25)",
-              }}
-            >
-              <span>{building.label}</span>
-              {building.isBurning && <span style={{ fontSize: 14 }}>🔥</span>}
-            </div>
-          </div>
-        ))}
+  <BuildingVisual key={building.id} building={building} />
+))}
       </div>
+
+      {isShiftPressed && hoveredBuilding && hoveredBuilding.imageCandidates?.[0] ? (
+        <div
+          style={{
+            position: "fixed",
+            right: 24,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 320,
+            height: 470,
+            zIndex: 9999,
+            pointerEvents: "none",
+            borderRadius: 18,
+            overflow: "hidden",
+            background: "#0f172a",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.75)",
+            border: "2px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          <img
+            src={hoveredBuilding.imageCandidates[0]}
+            alt={hoveredBuilding.type}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

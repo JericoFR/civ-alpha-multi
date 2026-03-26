@@ -1,6 +1,7 @@
 export const CARD_DEFS = {
   house: {
     key: "house",
+    id: "house",
     name: "Chaumière",
     era: 1,
     category: "building",
@@ -23,6 +24,7 @@ export const CARD_DEFS = {
 
   field: {
     key: "field",
+    id: "field",
     name: "Champ",
     era: 1,
     category: "building",
@@ -44,6 +46,7 @@ export const CARD_DEFS = {
 
   gold_mine: {
     key: "gold_mine",
+    id: "gold_mine",
     name: "Mine d’or",
     era: 1,
     category: "building",
@@ -65,6 +68,7 @@ export const CARD_DEFS = {
 
   barracks_1: {
     key: "barracks_1",
+    id: "barracks_1",
     name: "Caserne I",
     era: 1,
     category: "building",
@@ -86,6 +90,7 @@ export const CARD_DEFS = {
 
   barracks_fortified: {
     key: "barracks_fortified",
+    id: "barracks_fortified",
     name: "Caserne fortifiée",
     era: 2,
     category: "building",
@@ -107,6 +112,7 @@ export const CARD_DEFS = {
 
   palisade: {
     key: "palisade",
+    id: "palisade",
     name: "Palissade",
     era: 1,
     category: "building",
@@ -129,6 +135,7 @@ export const CARD_DEFS = {
 
   market: {
     key: "market",
+    id: "market",
     name: "Marché",
     era: 1,
     category: "building",
@@ -150,6 +157,7 @@ export const CARD_DEFS = {
 
   school: {
     key: "school",
+    id: "school",
     name: "École",
     era: 1,
     category: "building",
@@ -172,22 +180,120 @@ export const CARD_DEFS = {
 };
 
 export const INITIAL_HANDS = {
-  player1: [
-    "house",
-    "field",
-    "gold_mine",
-    "barracks_1",
-    "palisade",
-    "market",
-    "school",
-  ],
-  player2: [
-    "house",
-    "field",
-    "gold_mine",
-    "barracks_1",
-    "palisade",
-    "market",
-    "school",
-  ],
+  player1: ["house", "field", "gold_mine", "barracks_1", "palisade", "market", "school"],
+  player2: ["house", "field", "gold_mine", "barracks_1", "palisade", "market", "school"],
 };
+
+const BUILDING_TYPE_TO_CARD_KEY = {
+  townhall: "townhall",
+  house: "house",
+  production_food: "field",
+  production_gold: "gold_mine",
+  barracks_1: "barracks_1",
+  barracks_2: "barracks_fortified",
+  palisade: "palisade",
+  market: "market",
+  school: "school",
+};
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function normalizeAscii(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function buildImageCandidates(cardLike, baseDir = "/cards") {
+  if (!cardLike) return [];
+
+  const id = cardLike.id ?? cardLike.key ?? cardLike.type ?? "";
+  const name = cardLike.name ?? "";
+  const explicit = baseDir === "/board" ? cardLike.boardImage ?? null : cardLike.image ?? null;
+  const explicitPath = explicit
+    ? explicit.startsWith("/")
+      ? explicit
+      : `${baseDir}/${explicit}`
+    : null;
+
+  const rawNameFile = name ? `${baseDir}/${name}.png` : null;
+  const asciiName = normalizeAscii(name);
+  const asciiNameFile = asciiName ? `${baseDir}/${asciiName}.png` : null;
+  const slugName = asciiName
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const slugNameFile = slugName ? `${baseDir}/${slugName}.png` : null;
+  const lowerIdFile = id ? `${baseDir}/${String(id).toLowerCase()}.png` : null;
+  const exactIdFile = id ? `${baseDir}/${id}.png` : null;
+
+  return unique([
+    explicitPath,
+    exactIdFile,
+    lowerIdFile,
+    rawNameFile,
+    asciiNameFile,
+    slugNameFile,
+  ]);
+}
+
+export function getCardImageCandidates(cardLike) {
+  return buildImageCandidates(cardLike, "/cards");
+}
+
+export function getPrimaryCardImage(cardLike) {
+  return getCardImageCandidates(cardLike)[0] ?? null;
+}
+
+export function getBoardImageCandidates(cardLike) {
+  const boardCandidates = buildImageCandidates(cardLike, "/board");
+  const cardCandidates = buildImageCandidates(cardLike, "/cards");
+  return unique([...boardCandidates, ...cardCandidates]);
+}
+
+export function getPrimaryBoardImage(cardLike) {
+  return getBoardImageCandidates(cardLike)[0] ?? null;
+}
+
+export function getBuildingCardLike(buildingLike) {
+  if (!buildingLike) return null;
+
+  const sourceCardKey = buildingLike.sourceCardKey ?? null;
+  const sourceCard = sourceCardKey ? CARD_DEFS[sourceCardKey] ?? null : null;
+
+  if (sourceCard) {
+    return {
+      ...sourceCard,
+      type: buildingLike.type,
+      sourceCardKey,
+    };
+  }
+
+  const fallbackCardKey = BUILDING_TYPE_TO_CARD_KEY[buildingLike.type] ?? null;
+  const fallbackCard = fallbackCardKey ? CARD_DEFS[fallbackCardKey] ?? null : null;
+
+  if (fallbackCard) {
+    return {
+      ...fallbackCard,
+      type: buildingLike.type,
+      sourceCardKey: fallbackCardKey,
+    };
+  }
+
+  return {
+    id: buildingLike.type,
+    key: buildingLike.type,
+    type: buildingLike.type,
+    name: buildingLike.name ?? buildingLike.type,
+    image: null,
+    boardImage: null,
+  };
+}
+
+export function getBuildingImageCandidates(buildingLike) {
+  const cardLike = getBuildingCardLike(buildingLike);
+  return getBoardImageCandidates(cardLike);
+}

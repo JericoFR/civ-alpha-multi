@@ -256,6 +256,10 @@ function getCostLabel(card) {
   return bits.length > 0 ? bits.join(" ") : "gratuit";
 }
 
+function getCardImageSrc(card) {
+  return `/cards/${card.id ?? card.key}.png`;
+}
+
 function groupCardsForDisplay(cardKeys) {
   const groupedMap = new Map();
 
@@ -273,25 +277,96 @@ function groupCardsForDisplay(cardKeys) {
   return Array.from(groupedMap.values());
 }
 
-function CardButton({ card, quantity = 1, selected, disabled, affordable, onClick }) {
+function CardButton({
+  card,
+  quantity = 1,
+  selected,
+  disabled,
+  affordable,
+  hovered,
+  onHoverStart,
+  onHoverEnd,
+  onClick,
+}) {
+  const [imageError, setImageError] = useState(false);
+  const imageSrc = getCardImageSrc(card);
+  const showImage = !imageError;
+
   return (
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
+      onFocus={onHoverStart}
+      onBlur={onHoverEnd}
       disabled={disabled}
       style={{
         minWidth: 180,
         textAlign: "left",
         borderRadius: 14,
-        padding: 12,
+        padding: 10,
         border: selected ? "2px solid rgba(52, 211, 153, 0.95)" : "1px solid rgba(255,255,255,0.12)",
         background: disabled ? "#1f2937" : selected ? "#0f3d2e" : "#111827",
         color: "white",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.55 : 1,
         position: "relative",
+        overflow: "visible",
+        transform: hovered ? "scale(1.55)" : "scale(1)",
+        transformOrigin: "center bottom",
+        transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+        zIndex: hovered ? 30 : selected ? 3 : 1,
+        boxShadow: hovered
+          ? "0 20px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.18)"
+          : selected
+          ? "0 10px 24px rgba(16,185,129,0.18)"
+          : "none",
       }}
     >
+      <div
+        style={{
+          borderRadius: 12,
+          overflow: "hidden",
+          background: "#0b1220",
+          border: "1px solid rgba(255,255,255,0.06)",
+          minHeight: 180,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 10,
+        }}
+      >
+        {showImage ? (
+          <img
+            src={imageSrc}
+            alt={card.name}
+            onError={() => setImageError(true)}
+            style={{
+              display: "block",
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              userSelect: "none",
+              pointerEvents: "none",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              padding: 12,
+              textAlign: "center",
+              fontSize: 14,
+              opacity: 0.8,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>{card.name}</div>
+            <div>PNG absent</div>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>{imageSrc}</div>
+          </div>
+        )}
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -324,8 +399,6 @@ function CardButton({ card, quantity = 1, selected, disabled, affordable, onClic
         Ère {card.era} · {card.category} · {card.subCategory}
       </div>
 
-      <div style={{ fontSize: 13, opacity: 0.86, marginBottom: 8 }}>{card.text}</div>
-
       <div style={{ fontSize: 12, fontWeight: 700 }}>
         Coût : {getCostLabel(card)}
         {!affordable ? " · insuffisant" : ""}
@@ -345,6 +418,7 @@ function HandPanel({
   onSelectCard,
 }) {
   const groupedCards = useMemo(() => groupCardsForDisplay(cards), [cards]);
+  const [hoveredCardKey, setHoveredCardKey] = useState(null);
 
   return (
     <div
@@ -372,7 +446,7 @@ function HandPanel({
         ) : null}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, overflow: "visible" }}>
         {groupedCards.length === 0 ? (
           <div style={{ opacity: 0.7 }}>Aucune carte en main.</div>
         ) : (
@@ -388,6 +462,9 @@ function HandPanel({
                 selected={isActivePhase && selectedCardKey === cardKey}
                 disabled={!isActivePhase || pendingHousingSacrificePlayers.length > 0 || !affordable}
                 affordable={affordable}
+                hovered={hoveredCardKey === cardKey}
+                onHoverStart={() => setHoveredCardKey(cardKey)}
+                onHoverEnd={() => setHoveredCardKey((current) => (current === cardKey ? null : current))}
                 onClick={() => onSelectCard(cardKey)}
               />
             );

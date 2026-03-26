@@ -111,7 +111,7 @@ function createDebugUnit(type, player, x, y, unitId = null) {
   };
 }
 
-function createBuilding(type, player, x, y, orientation = "vertical") {
+function createBuilding(type, player, x, y, orientation = "vertical", sourceCardKey = null) {
   return {
     id: `building-${type}-${player}-${Date.now()}-${Math.random()
       .toString(36)
@@ -124,6 +124,7 @@ function createBuilding(type, player, x, y, orientation = "vertical") {
     size: 2,
     isActive: true,
     isBurning: false,
+    sourceCardKey,
   };
 }
 
@@ -616,7 +617,7 @@ export function gameReducer(state, action) {
 
       const nextBuildings = [
         ...state.buildings,
-        createBuilding(card.createsBuildingType, player, x, y, orientation),
+        createBuilding(card.createsBuildingType, player, x, y, orientation, card.key),
       ];
 
       const buildersBonus = state.activePointCard?.key === "builders_age" ? 2 : 0;
