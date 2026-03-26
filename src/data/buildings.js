@@ -68,6 +68,29 @@ export const BUILDING_DEFS = {
     cost: { gold: 3 },
     height: 2,
   },
+
+  aqueduct: {
+  key: "aqueduct",
+  name: "Aqueduc",
+  cost: { gold: 3 },
+  height: 2,
+},
+
+castrum: {
+  key: "castrum",
+  name: "Castrum",
+  cost: { gold: 4 },
+  height: 2,
+},
+
+forum: {
+  key: "forum",
+  name: "Forum",
+  cost: { gold: 2 },
+  height: 2,
+},
+
+
 };
 
 export function getBuildingDef(buildingOrType) {

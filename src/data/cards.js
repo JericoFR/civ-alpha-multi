@@ -177,6 +177,97 @@ export const CARD_DEFS = {
     },
     createsBuildingType: "school",
   },
+
+
+
+
+
+
+
+
+aqueduct: {
+  key: "aqueduct",
+  id: "aqueduct",
+  name: "Aqueduc",
+  era: 1,
+  category: "building",
+  subCategory: "production",
+  civilization: "roman",
+  tags: ["building", "production", "roman"],
+  buildPoints: 1,
+  cost: { gold: 3 },
+  text:
+    "Chaque bâtiment de production de nourriture produit +1 🌾.",
+  placement: {
+    mode: "green_pair",
+    size: 2,
+    allowHorizontal: true,
+    allowVertical: true,
+    ownerOnly: true,
+  },
+  createsBuildingType: "aqueduct",
+},
+
+castrum: {
+  key: "castrum",
+  id: "castrum",
+  name: "Castrum",
+  era: 1,
+  category: "building",
+  subCategory: "military",
+  civilization: "roman",
+  tags: ["building", "military", "roman"],
+  buildPoints: 1,
+  cost: { gold: 4 },
+  text:
+    "Compte comme Caserne I. Pendant l’Ère I, ce bâtiment n’a pas besoin d’ouvrier actif pour recruter.",
+  placement: {
+    mode: "green_pair",
+    size: 2,
+    allowHorizontal: true,
+    allowVertical: true,
+    ownerOnly: true,
+  },
+  createsBuildingType: "castrum",
+},
+
+forum: {
+  key: "forum",
+  id: "forum",
+  name: "Forum",
+  era: 1,
+  category: "building",
+  subCategory: "economy",
+  civilization: "roman",
+  tags: ["building", "economy", "roman"],
+  buildPoints: 1,
+  cost: { gold: 2 },
+  text:
+    "+1 💰 de base. +1 💰 si un ouvrier actif est dedans. +1 💰 si tu contrôles le centre.",
+  placement: {
+    mode: "green_pair",
+    size: 2,
+    allowHorizontal: true,
+    allowVertical: true,
+    ownerOnly: true,
+  },
+  createsBuildingType: "forum",
+},
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 };
 
 export const INITIAL_HANDS = {

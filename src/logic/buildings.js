@@ -41,6 +41,19 @@ export function hasActiveWorkerInBuilding(building, units) {
   return getAlliedWorkersInsideBuilding(building, units).length > 0;
 }
 
+function canRecruitFromBuilding(building, units, currentEra = 1) {
+  const hasWorker = hasActiveWorkerInBuilding(building, units);
+
+  if (hasWorker) return true;
+
+  const isCastrumEra1 =
+    building.sourceCardKey === "castrum" && currentEra === 1;
+
+  if (isCastrumEra1) return true;
+
+  return false;
+}
+
 export function getValidWorkerSpawnCells(buildings, units, player) {
   const valid = [];
 
@@ -72,14 +85,21 @@ export function getValidWorkerSpawnCells(buildings, units, player) {
   return valid;
 }
 
-export function getValidMilitarySpawnCells(buildings, units, player, unitType) {
+export function getValidMilitarySpawnCells(
+  buildings,
+  units,
+  player,
+  unitType,
+  currentEra = 1
+) {
   const valid = [];
 
   for (const building of buildings) {
     if (building.player !== player) continue;
     if (building.isBurning || building.isActive === false) continue;
 
-    const isBarracks1 = building.type === "barracks_1";
+    const isBarracks1 =
+  building.type === "barracks_1" || building.type === "castrum";
     const isBarracks2 = building.type === "barracks_2";
 
     const requiresBarracks1 = unitType === "soldier" || unitType === "archer";
@@ -87,7 +107,7 @@ export function getValidMilitarySpawnCells(buildings, units, player, unitType) {
 
     if (requiresBarracks1 && !isBarracks1 && !isBarracks2) continue;
     if (requiresBarracks2 && !isBarracks2) continue;
-    if (!hasActiveWorkerInBuilding(building, units)) continue;
+    if (!canRecruitFromBuilding(building, units, currentEra)) continue;
 
     const cells = normalizeBuildingCells(building);
 

@@ -94,7 +94,15 @@ function getValidSpawnCellsForPurchaseMode(state, player, mode) {
     return getValidWorkerSpawnCells(state.buildings, state.units, player);
   }
 
-  return getValidMilitarySpawnCells(state.buildings, state.units, player, mode);
+  const currentEra = Math.ceil(state.turn / 10);
+
+  return getValidMilitarySpawnCells(
+    state.buildings,
+    state.units,
+    player,
+    mode,
+    currentEra
+  );
 }
 
 function createDebugUnit(type, player, x, y, unitId = null) {
@@ -848,7 +856,14 @@ export function gameReducer(state, action) {
         };
       }
 
-      const validCells = getValidMilitarySpawnCells(state.buildings, state.units, player, unitType);
+      const currentEra = Math.ceil(state.turn / 10);
+      const validCells = getValidMilitarySpawnCells(
+  state.buildings,
+  state.units,
+  player,
+  unitType,
+  currentEra
+);
       const isValid = validCells.some((cell) => cell.x === x && cell.y === y);
 
       if (!isValid) {

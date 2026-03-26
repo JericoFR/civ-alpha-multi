@@ -502,6 +502,7 @@ function PurchasePanel({
   purchasePlayer,
   onSetPurchaseMode,
   activeEventCard,
+  currentEra,
 }) {
   const workerFoodCost = getWorkerFoodCost(activeEventCard);
 
@@ -509,27 +510,37 @@ function PurchasePanel({
     return player === 1 ? resources.player1 : resources.player2;
   }
 
-  function hasActiveBarracks(buildings, units, player, level) {
-  return buildings.some((b) => {
-    if (b.player !== player) return false;
-    if (b.isBurning) return false;
+  function hasActiveBarracks(buildings, units, player, level, currentEraValue = 1) {
+    return buildings.some((b) => {
+      if (b.player !== player) return false;
+      if (b.isBurning) return false;
 
-    const isCorrectBarracks =
-  (level === 1 && (b.type === "barracks_1" || b.type === "barracks_2")) ||
-  (level === 2 && b.type === "barracks_2");
+      const isCorrectBarracks =
+        (level === 1 &&
+          (b.type === "barracks_1" ||
+            b.type === "barracks_2" ||
+            b.type === "castrum")) ||
+        (level === 2 && b.type === "barracks_2");
 
-    if (!isCorrectBarracks) return false;
+      if (!isCorrectBarracks) return false;
 
-    const buildingCells = getBuildingCells(b);
+      const buildingCells = getBuildingCells(b);
+      const hasWorkerInside = units.some(
+        (u) =>
+          u.player === player &&
+          u.type === "worker" &&
+          buildingCells.some((cell) => cell.x === u.x && cell.y === u.y)
+      );
 
-    return units.some(
-      (u) =>
-        u.player === player &&
-        u.type === "worker" &&
-        buildingCells.some((cell) => cell.x === u.x && cell.y === u.y)
-    );
-  });
-}
+      if (hasWorkerInside) return true;
+
+      const isCastrumEra1 = b.sourceCardKey === "castrum" && currentEraValue === 1;
+
+      if (isCastrumEra1) return true;
+
+      return false;
+    });
+  }
 
   const options = [
   {
@@ -605,7 +616,7 @@ function PurchasePanel({
   const barracksOk =
     option.barracksLevel == null
       ? true
-      : hasActiveBarracks(buildings, units, player, option.barracksLevel);
+      : hasActiveBarracks(buildings, units, player, option.barracksLevel, currentEra);
 
   const enabled = option.enabled && barracksOk;
   const disabled = !enabled || !affordable;
@@ -759,8 +770,8 @@ function EconomyCompactPanel({
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Marché central</div>
             <div style={{ fontSize: 12, opacity: 0.82 }}>
               {centralAvailable
-                ? "Disponible : 1 ouvrier allié, aucun ennemi sur la croix orange"
-                : `Indispo : ${centralStatus.alliedWorkerCount} ouvrier allié, ${centralStatus.enemyUnitCount} ennemi`}
+                ? "Disponible : au moins 1 unité alliée, aucun ennemi sur la croix orange"
+                : `Indispo : ${centralStatus.alliedUnitCount} unité alliée, ${centralStatus.enemyUnitCount} ennemi`}
             </div>
           </button>
         </div>
@@ -2407,6 +2418,7 @@ if (appPhase === "setup") {
     purchasePlayer={purchasePlayer}
     onSetPurchaseMode={handleSetPurchaseMode}
     activeEventCard={activeEventCard}
+    currentEra={currentEra}
   />
 ) : null}
 

@@ -86,6 +86,16 @@ function createEmptyProduction() {
   return { food: 0, gold: 0 };
 }
 
+function getOperationalRomanBuildings(buildings, player, sourceCardKey) {
+  return buildings.filter(
+    (b) =>
+      b.player === player &&
+      b.sourceCardKey === sourceCardKey &&
+      !b.isBurning &&
+      b.isActive !== false
+  );
+}
+
 export function getProductionPreviewForPlayer(buildings, units, player, activeEventCard = null) {
   const production = createEmptyProduction();
 
@@ -107,11 +117,50 @@ export function getProductionPreviewForPlayer(buildings, units, player, activeEv
 
     let totalGain = base + bonus;
 
+    // 🔥 AQUEDUC
+    const hasAqueduct = buildings.some(
+      (b) =>
+        b.player === player &&
+        b.sourceCardKey === "aqueduct" &&
+        !b.isBurning &&
+        b.isActive !== false
+    );
+
+    if (def.resource === "food" && hasAqueduct) {
+      totalGain += 1;
+    }
+
     if (activeEventCard?.key === "gold_tension" && def.resource === "gold") {
       totalGain -= 1;
     }
 
     production[def.resource] += Math.max(0, totalGain);
+  }
+
+  const activeForums = buildings.filter(
+    (b) =>
+      b.player === player &&
+      b.sourceCardKey === "forum" &&
+      !b.isBurning &&
+      b.isActive !== false
+  );
+
+  if (activeForums.length > 0) {
+    const controlsCenter = getCentralMarketStatus(units, player).isControlled;
+
+    for (const forum of activeForums) {
+      let forumGold = 1;
+
+      if (hasAlliedWorkerInside(forum, units)) {
+        forumGold += 1;
+      }
+
+      if (controlsCenter) {
+        forumGold += 1;
+      }
+
+      production.gold += forumGold;
+    }
   }
 
   return production;
@@ -216,25 +265,27 @@ export function hasActivePersonalMarket(buildings, units, player) {
 }
 
 export function getCentralMarketStatus(units, player) {
-  const alliedWorkers = units.filter(
-    (unit) => unit.player === player && unit.type === "worker" && isCentralMarketCell(unit.x, unit.y)
+  const alliedUnits = units.filter(
+    (unit) => unit.player === player && isCentralMarketCell(unit.x, unit.y)
   );
+
+  const alliedWorkers = alliedUnits.filter((unit) => unit.type === "worker");
 
   const enemyUnits = units.filter(
     (unit) => unit.player !== player && isCentralMarketCell(unit.x, unit.y)
   );
 
-  const ownOtherUnits = units.filter(
-    (unit) => unit.player === player && unit.type !== "worker" && isCentralMarketCell(unit.x, unit.y)
-  );
+  const ownOtherUnits = alliedUnits.filter((unit) => unit.type !== "worker");
 
   return {
+    alliedUnitCount: alliedUnits.length,
     alliedWorkerCount: alliedWorkers.length,
     enemyUnitCount: enemyUnits.length,
     ownOtherUnitCount: ownOtherUnits.length,
+    hasAtLeastOneAlliedUnit: alliedUnits.length >= 1,
     hasExactlyOneWorker: alliedWorkers.length === 1,
     hasEnemyPresence: enemyUnits.length > 0,
-    isControlled: alliedWorkers.length === 1 && enemyUnits.length === 0,
+    isControlled: alliedUnits.length >= 1 && enemyUnits.length === 0,
   };
 }
 
