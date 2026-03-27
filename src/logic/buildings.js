@@ -41,6 +41,26 @@ export function hasActiveWorkerInBuilding(building, units) {
   return getAlliedWorkersInsideBuilding(building, units).length > 0;
 }
 
+const ROMAN_SOURCE_CARD_KEYS = ["aqueduct", "castrum", "forum", "coliseum"];
+
+export function isRomanBuilding(building) {
+  return ROMAN_SOURCE_CARD_KEYS.includes(building?.sourceCardKey);
+}
+
+export function countActiveRomanBuildings(buildings, player, { includeColiseum = true } = {}) {
+  return buildings.filter((building) => {
+    if (building.player !== player) return false;
+    if (building.isBurning || building.isActive === false) return false;
+    if (!isRomanBuilding(building)) return false;
+    if (!includeColiseum && building.sourceCardKey === "coliseum") return false;
+    return true;
+  }).length;
+}
+
+export function hasColiseumUnlock(buildings, player) {
+  return countActiveRomanBuildings(buildings, player, { includeColiseum: false }) >= 3;
+}
+
 function canRecruitFromBuilding(building, units, currentEra = 1) {
   const hasWorker = hasActiveWorkerInBuilding(building, units);
 
@@ -99,7 +119,7 @@ export function getValidMilitarySpawnCells(
     if (building.isBurning || building.isActive === false) continue;
 
     const isBarracks1 =
-  building.type === "barracks_1" || building.type === "castrum";
+      building.type === "barracks_1" || building.type === "castrum";
     const isBarracks2 = building.type === "barracks_2";
 
     const requiresBarracks1 = unitType === "soldier" || unitType === "archer";
@@ -205,6 +225,41 @@ function getDefenseCellOwner(buildings, x, y) {
   return null;
 }
 
+function isValidVerticalAnchorForGreenSlot(y) {
+  // Base J1 : slots verticaux autorisés = 0-1 et 2-3
+  if (y >= 0 && y <= 4) {
+    return y === 0 || y === 2;
+  }
+
+  // Base J2 : slots verticaux autorisés = 15-16 et 17-18
+  if (y >= 15 && y <= 18) {
+    return y === 15 || y === 17;
+  }
+
+  // No man's land J1 : 7-8
+  if (y >= 7 && y <= 8) {
+    return y === 7;
+  }
+
+  // No man's land J2 : 10-11
+  if (y >= 10 && y <= 11) {
+    return y === 10;
+  }
+
+  return false;
+}
+
+function respectsSlotAnchoring({ x, y, orientation, expectedTerrain, size }) {
+  if (expectedTerrain !== "vert") return true;
+  if (size !== 2) return true;
+
+  if (orientation === "vertical") {
+    return isValidVerticalAnchorForGreenSlot(y);
+  }
+
+  return true;
+}
+
 function canPlacePair({
   occupied,
   buildings,
@@ -215,6 +270,18 @@ function canPlacePair({
   orientation,
   expectedTerrain,
 }) {
+  if (
+    !respectsSlotAnchoring({
+      x,
+      y,
+      orientation,
+      expectedTerrain,
+      size,
+    })
+  ) {
+    return false;
+  }
+
   const cells = Array.from({ length: size }, (_, index) => ({
     x: x + (orientation === "horizontal" ? index : 0),
     y: y + (orientation === "vertical" ? index : 0),

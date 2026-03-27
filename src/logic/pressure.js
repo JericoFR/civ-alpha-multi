@@ -192,6 +192,12 @@ export function resolveMilitaryPressure(units, buildings, options = {}) {
     }
   }
 
+  const destroyedUnits = units.filter((unit) => destroyedIds.has(unit.id));
+  const destroyedByPlayer = {
+    player1: destroyedUnits.filter((unit) => unit.player === 2).length,
+    player2: destroyedUnits.filter((unit) => unit.player === 1).length,
+  };
+
   return {
     units: units.filter((unit) => !destroyedIds.has(unit.id)),
     buildings: buildings.map((building) =>
@@ -203,7 +209,8 @@ export function resolveMilitaryPressure(units, buildings, options = {}) {
           }
         : building
     ),
-    destroyedUnits: units.filter((unit) => destroyedIds.has(unit.id)),
+    destroyedUnits,
+    destroyedByPlayer,
     burningBuildings: buildings.filter((building) =>
       burningIds.has(building.id)
     ),

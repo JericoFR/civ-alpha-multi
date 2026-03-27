@@ -1400,7 +1400,7 @@ function handleRematchDeclined(payload) {
   setPrivateSciencePeek(data ?? null);
 }
 
-    socket.connect();
+   
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
@@ -1440,26 +1440,28 @@ socket.on("REMATCH_ACCEPTED_WAITING", () => {
   setRoomMessage("Revanche acceptée de ton côté. En attente de l’autre joueur.");
 });
 
-    return () => {
-      socket.off("connect", handleConnect);
-      socket.off("disconnect", handleDisconnect);
-      socket.off("roomCreated", handleRoomCreated);
-      socket.off("roomJoined", handleRoomJoined);
-      socket.off("roomUpdate", handleRoomUpdate);
-      socket.off("GAME_STATE", handleGameState);
-      socket.off("errorMessage", handleErrorMessage);
-      socket.off("SCIENCE_PEEK_RESULT", handleSciencePeekResult);
-      socket.off("SETUP_UPDATE", handleSetupUpdate);
-      socket.off("GAME_START", handleGameStart);
-      socket.off("RETURN_TO_LOBBY", handleReturnToLobby);
-      socket.off("REMATCH_REQUESTED", handleRematchRequest);
-      socket.off("ROOM_DECK_UPDATE");
-      socket.off("REMATCH_PENDING");
-      socket.off("REMATCH_DECLINED");
-      socket.off("REMATCH_ACCEPTED");
-      socket.off("REMATCH_ACCEPTED_WAITING");
-      socket.disconnect();
-    };
+socket.connect();
+
+return () => {
+  socket.off("connect", handleConnect);
+  socket.off("disconnect", handleDisconnect);
+  socket.off("roomCreated", handleRoomCreated);
+  socket.off("roomJoined", handleRoomJoined);
+  socket.off("roomUpdate", handleRoomUpdate);
+  socket.off("GAME_STATE", handleGameState);
+  socket.off("errorMessage", handleErrorMessage);
+  socket.off("SCIENCE_PEEK_RESULT", handleSciencePeekResult);
+  socket.off("SETUP_UPDATE", handleSetupUpdate);
+  socket.off("GAME_START", handleGameStart);
+  socket.off("RETURN_TO_LOBBY", handleReturnToLobby);
+  socket.off("REMATCH_REQUESTED", handleRematchRequest);
+  socket.off("ROOM_DECK_UPDATE");
+  socket.off("REMATCH_PENDING");
+  socket.off("REMATCH_DECLINED");
+  socket.off("REMATCH_ACCEPTED");
+  socket.off("REMATCH_ACCEPTED_WAITING");
+  socket.disconnect();
+};
   }, []);
 
   const {

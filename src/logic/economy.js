@@ -47,7 +47,8 @@ export function getHousingCapacity(buildings, player, activeEventCard = null) {
     if (building.player !== player) return total;
     if (!isBuildingOperational(building)) return total;
     const def = BUILDING_DEFS[building.type];
-    return total + (def?.housing ?? 0);
+    const manualHousingBonus = building.sourceCardKey === "coliseum" ? 2 : 0;
+    return total + (def?.housing ?? 0) + manualHousingBonus;
   }, 0);
 
   if (activeEventCard?.key === "housing_crisis") {
@@ -93,6 +94,16 @@ function getOperationalRomanBuildings(buildings, player, sourceCardKey) {
       b.sourceCardKey === sourceCardKey &&
       !b.isBurning &&
       b.isActive !== false
+  );
+}
+
+export function hasActiveColiseum(buildings, player) {
+  return buildings.some(
+    (building) =>
+      building.player === player &&
+      building.sourceCardKey === "coliseum" &&
+      !building.isBurning &&
+      building.isActive !== false
   );
 }
 

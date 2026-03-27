@@ -254,6 +254,29 @@ forum: {
   createsBuildingType: "forum",
 },
 
+coliseum: {
+  key: "coliseum",
+  id: "coliseum",
+  name: "Colisée",
+  era: 1,
+  category: "building",
+  subCategory: "wonder",
+  civilization: "roman",
+  tags: ["building", "wonder", "roman", "unique"],
+  buildPoints: 2,
+  cost: { gold: 12 },
+  text:
+    "+2 logements tant qu’il est actif. Condition d’achat : avoir 3 bâtiments romains actifs au moment de jouer la carte. À chaque résolution militaire, si ta pression détruit au moins 1 unité ennemie, gagne +1 PV.",
+  placement: {
+    mode: "green_pair",
+    size: 2,
+    allowHorizontal: true,
+    allowVertical: true,
+    ownerOnly: true,
+  },
+  createsBuildingType: "coliseum",
+},
+
 
 
 
@@ -285,6 +308,10 @@ const BUILDING_TYPE_TO_CARD_KEY = {
   palisade: "palisade",
   market: "market",
   school: "school",
+  aqueduct: "aqueduct",
+  castrum: "castrum",
+  forum: "forum",
+  coliseum: "coliseum",
 };
 
 function unique(values) {

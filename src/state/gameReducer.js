@@ -11,6 +11,7 @@ import {
   getHousingCapacity,
   getWorkerFoodCost,
   getScienceWinner,
+  hasActiveColiseum,
   hasActivePersonalMarket,
   spendCost,
 } from "../logic/economy.js";
@@ -19,6 +20,7 @@ import {
   getValidBuildingPlacements,
   getValidMilitarySpawnCells,
   getValidWorkerSpawnCells,
+  hasColiseumUnlock,
 } from "../logic/buildings.js";
 import { createInitialState, getPhaseDefinition, PHASES } from "./initialState.js";
 
@@ -579,7 +581,14 @@ export function gameReducer(state, action) {
         };
       }
 
-            if (!canAfford(state.resources[playerKey], card.cost)) {
+      if (cardKey === "coliseum" && !hasColiseumUnlock(state.buildings, player)) {
+        return {
+          ...state,
+          debugText: "Le Colisée nécessite 3 bâtiments romains actifs pour être acheté.",
+        };
+      }
+
+      if (!canAfford(state.resources[playerKey], card.cost)) {
         return {
           ...state,
           debugText: `Pas assez de ressources pour jouer ${card.name}.`,
@@ -1149,6 +1158,19 @@ if (unitType === "archer") {
         nextPoints = addPointsToAxis(nextPoints, "player2", "military", militaryPointsP2);
       }
 
+      const coliseumBonusP1 =
+        result.destroyedByPlayer?.player1 > 0 && hasActiveColiseum(result.buildings, 1) ? 1 : 0;
+      const coliseumBonusP2 =
+        result.destroyedByPlayer?.player2 > 0 && hasActiveColiseum(result.buildings, 2) ? 1 : 0;
+
+      if (coliseumBonusP1 > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player1", "military", coliseumBonusP1);
+      }
+
+      if (coliseumBonusP2 > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player2", "military", coliseumBonusP2);
+      }
+
       return {
         ...state,
         units: result.units,
@@ -1158,8 +1180,16 @@ if (unitType === "archer") {
         militaryResolutionDoneThisPhase: true,
         debugText:
           overflowPlayers.length > 0
-            ? `${buildMilitaryResolutionDebug(result)} ${formatOverflowMessage(overflowPlayers)}`
-            : buildMilitaryResolutionDebug(result),
+            ? `${buildMilitaryResolutionDebug(result)}${
+                coliseumBonusP1 > 0 || coliseumBonusP2 > 0
+                  ? ` Colisée :${coliseumBonusP1 > 0 ? ` J1 +${coliseumBonusP1} PV.` : ""}${coliseumBonusP2 > 0 ? ` J2 +${coliseumBonusP2} PV.` : ""}`
+                  : ""
+              } ${formatOverflowMessage(overflowPlayers)}`
+            : `${buildMilitaryResolutionDebug(result)}${
+                coliseumBonusP1 > 0 || coliseumBonusP2 > 0
+                  ? ` Colisée :${coliseumBonusP1 > 0 ? ` J1 +${coliseumBonusP1} PV.` : ""}${coliseumBonusP2 > 0 ? ` J2 +${coliseumBonusP2} PV.` : ""}`
+                  : ""
+              }`,
       };
     }
 

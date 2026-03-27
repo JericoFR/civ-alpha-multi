@@ -32,6 +32,7 @@ function getBuildingLabel(type) {
   if (type === "market") return "💰";
   if (type === "school") return "🎓";
   if (type === "palisade") return "🛡️";
+  if (type === "coliseum") return "🏛️";
   return "";
 }
 
@@ -83,6 +84,14 @@ function getBuildingColor(type) {
     shadow: "rgba(120, 53, 15, 0.5)",
   };
 }
+
+  if (type === "coliseum") {
+    return {
+      fill: "linear-gradient(180deg, #fde68a 0%, #d97706 100%)",
+      border: "#fef3c7",
+      shadow: "rgba(217, 119, 6, 0.45)",
+    };
+  }
 
   return {
     fill: "linear-gradient(180deg, #facc15 0%, #eab308 100%)",
