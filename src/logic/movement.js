@@ -52,25 +52,6 @@ export function hasAlliedMilitaryOnCell(units, selectedUnit, x, y) {
   );
 }
 
-export function normalizeBuildingCells(building) {
-  if (!building) return [];
-
-  const size = building.size ?? 2;
-  const orientation = building.orientation ?? "vertical";
-
-  if (orientation === "horizontal") {
-    return Array.from({ length: size }, (_, index) => ({
-      x: building.x + index,
-      y: building.y,
-    }));
-  }
-
-  return Array.from({ length: size }, (_, index) => ({
-    x: building.x,
-    y: building.y + index,
-  }));
-}
-
 export function isEnemyMovementBlockedByBuilding(building, selectedUnit, x, y) {
   if (!building || !selectedUnit) return false;
   if (building.player === selectedUnit.player) return false;

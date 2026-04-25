@@ -12,7 +12,7 @@ function filterInsideBoard(cells) {
   return cells.filter((cell) => isInsideBoard(cell.x, cell.y));
 }
 
-function getSoldierPressureCells(unit) {
+function getCrossPressureCells(unit) {
   return filterInsideBoard([
     { x: unit.x, y: unit.y },
     { x: unit.x + 1, y: unit.y },
@@ -52,7 +52,7 @@ function getDirectionalCells(unit, distance) {
   }));
 }
 
-function getArcherPressureCells(unit) {
+function getDirectionalPressureCells(unit) {
   return filterInsideBoard([
     { x: unit.x, y: unit.y },
     ...getDirectionalCells(unit, 2),
@@ -60,9 +60,10 @@ function getArcherPressureCells(unit) {
 }
 
 function getPressureCellsForUnit(unit) {
-  if (unit.type === "soldier") return getSoldierPressureCells(unit);
-  if (unit.type === "archer") return getArcherPressureCells(unit);
-  if (unit.type === "siege") return getArcherPressureCells(unit);
+  if (unit.type === "soldier") return getCrossPressureCells(unit);
+  if (unit.type === "cavalry") return getCrossPressureCells(unit);
+  if (unit.type === "archer") return getDirectionalPressureCells(unit);
+  if (unit.type === "siege") return getDirectionalPressureCells(unit);
   return [];
 }
 

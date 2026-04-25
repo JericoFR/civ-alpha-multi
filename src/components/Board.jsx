@@ -332,6 +332,7 @@ export default function Board({
   onUnitClick,
 }) {
   const width = BOARD[0].length;
+  const displayPressure = showPressure === true;
 
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [hoveredBuilding, setHoveredBuilding] = useState(null);
@@ -425,8 +426,8 @@ export default function Board({
     : null;
             const cellUnits = unitsByCell.get(key) || [];
             const isReachable = reachableSet.has(key);
-            const pressureEntry = pressureMap[key];
-            const pressureVisual = showPressure ? getPressureVisual(pressureEntry) : null;
+            const pressureEntry = displayPressure ? pressureMap[key] : null;
+            const pressureVisual = displayPressure ? getPressureVisual(pressureEntry) : null;
             const isPlacementCell = placementSet.has(key);
             const isSpawnCell = spawnSet.has(key);
             const isGreenSlot = cell === "vert";

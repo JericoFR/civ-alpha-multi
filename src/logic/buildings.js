@@ -61,15 +61,13 @@ export function hasColiseumUnlock(buildings, player) {
   return countActiveRomanBuildings(buildings, player, { includeColiseum: false }) >= 3;
 }
 
-function canRecruitFromBuilding(building, units, currentEra = 1) {
+function canRecruitFromBuilding(building, units) {
   const hasWorker = hasActiveWorkerInBuilding(building, units);
 
   if (hasWorker) return true;
 
-  const isCastrumEra1 =
-    building.sourceCardKey === "castrum" && currentEra === 1;
-
-  if (isCastrumEra1) return true;
+  // Nouveau système sans ères : le Castrum garde son identité de caserne romaine autonome.
+  if (building.sourceCardKey === "castrum") return true;
 
   return false;
 }
@@ -109,8 +107,7 @@ export function getValidMilitarySpawnCells(
   buildings,
   units,
   player,
-  unitType,
-  currentEra = 1
+  unitType
 ) {
   const valid = [];
 
@@ -127,7 +124,7 @@ export function getValidMilitarySpawnCells(
 
     if (requiresBarracks1 && !isBarracks1 && !isBarracks2) continue;
     if (requiresBarracks2 && !isBarracks2) continue;
-    if (!canRecruitFromBuilding(building, units, currentEra)) continue;
+    if (!canRecruitFromBuilding(building, units)) continue;
 
     const cells = normalizeBuildingCells(building);
 
@@ -314,7 +311,7 @@ export function getValidBuildingPlacements(
   player,
   {
     mode = "green_pair",
-    allowHorizontal = true,
+    allowHorizontal = false,
     allowVertical = true,
     size = 2,
   } = {}
@@ -355,21 +352,7 @@ export function getValidBuildingPlacements(
         results.push({ x, y, orientation: "vertical" });
       }
 
-      if (
-        allowHorizontal &&
-        canPlacePair({
-          occupied,
-          buildings,
-          player,
-          x,
-          y,
-          size,
-          orientation: "horizontal",
-          expectedTerrain,
-        })
-      ) {
-        results.push({ x, y, orientation: "horizontal" });
-      }
+      
     }
   }
 

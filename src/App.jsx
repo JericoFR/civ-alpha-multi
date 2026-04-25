@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Board from "./components/Board";
 import Sidebar from "./components/Sidebar";
 import DeckBuilder from "./components/DeckBuilder";
+import Arena from "./modes/arena/Arena";
 import { socket } from "./network/socket";
 import { CARD_DEFS } from "./data/cards";
 import {
@@ -22,8 +23,6 @@ import { buildPressureMap } from "./logic/pressure";
 import { gameReducer } from "./state/gameReducer";
 import { createInitialState, getPhaseDefinition, initialState } from "./state/initialState";
 
-const TURNS_PER_ERA = 10;
-const TOTAL_ERAS = 4;
 
 
 const SETUP_STEPS = [
@@ -250,6 +249,8 @@ function countRemainingUnitsForPhase(units, activatedUnitIds, phase, player) {
 }
 
 function getCostLabel(card) {
+  if (!card) return "inconnu";
+
   const bits = [];
   if (card.cost?.food) bits.push(`${card.cost.food} 🌾`);
   if (card.cost?.gold) bits.push(`${card.cost.gold} 💰`);
@@ -263,7 +264,9 @@ function getCardImageSrc(card) {
 function groupCardsForDisplay(cardKeys) {
   const groupedMap = new Map();
 
-  for (const cardKey of cardKeys) {
+  for (const cardKey of cardKeys ?? []) {
+    if (typeof cardKey !== "string" || !CARD_DEFS[cardKey]) continue;
+
     if (!groupedMap.has(cardKey)) {
       groupedMap.set(cardKey, {
         cardKey,
@@ -396,7 +399,7 @@ function CardButton({
       </div>
 
       <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 6 }}>
-        Ère {card.era} · {card.category} · {card.subCategory}
+        {card.category} · {card.subCategory}
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 700 }}>
@@ -451,11 +454,14 @@ function HandPanel({
           <div style={{ opacity: 0.7 }}>Aucune carte en main.</div>
         ) : (
           groupedCards.map(({ cardKey, quantity }) => {
-            const card = CARD_DEFS[cardKey];
-            const affordable = canAfford(resources, card.cost);
+  const card = CARD_DEFS[cardKey];
 
-            return (
-              <CardButton
+  if (!card) return null;
+
+  const affordable = canAfford(resources, card.cost ?? {});
+
+  return (
+    <CardButton
                 key={cardKey}
                 card={card}
                 quantity={quantity}
@@ -502,7 +508,6 @@ function PurchasePanel({
   purchasePlayer,
   onSetPurchaseMode,
   activeEventCard,
-  currentEra,
 }) {
   const workerFoodCost = getWorkerFoodCost(activeEventCard);
 
@@ -510,7 +515,7 @@ function PurchasePanel({
     return player === 1 ? resources.player1 : resources.player2;
   }
 
-  function hasActiveBarracks(buildings, units, player, level, currentEraValue = 1) {
+  function hasActiveBarracks(buildings, units, player, level) {
     return buildings.some((b) => {
       if (b.player !== player) return false;
       if (b.isBurning) return false;
@@ -534,9 +539,7 @@ function PurchasePanel({
 
       if (hasWorkerInside) return true;
 
-      const isCastrumEra1 = b.sourceCardKey === "castrum" && currentEraValue === 1;
-
-      if (isCastrumEra1) return true;
+      if (b.sourceCardKey === "castrum") return true;
 
       return false;
     });
@@ -616,7 +619,7 @@ function PurchasePanel({
   const barracksOk =
     option.barracksLevel == null
       ? true
-      : hasActiveBarracks(buildings, units, player, option.barracksLevel, currentEra);
+      : hasActiveBarracks(buildings, units, player, option.barracksLevel);
 
   const enabled = option.enabled && barracksOk;
   const disabled = !enabled || !affordable;
@@ -883,7 +886,7 @@ function ScienceCompactPanel({ phase, buildings, units, scienceActionUsedThisPha
       </div>
       <div style={{ fontSize: 13, opacity: 0.82 }}>
         {winner.player
-          ? `J${winner.player} a strictement le plus de science et peut regarder 1 prochaine carte d’ère.`
+          ? `J${winner.player} a strictement le plus de science et peut regarder 1 prochaine carte globale.`
           : "Égalité scientifique : personne n’active l’effet ce tour."}
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -1054,7 +1057,7 @@ function RoomPanel({
   );
 }
 
-function HomePanel({ onStartSolo, onStartMulti, onOpenDeckBuilder }) {
+function HomePanel({ onStartSolo, onStartMulti, onOpenDeckBuilder, onStartArena }) {
   return (
     <div
       style={{
@@ -1087,6 +1090,7 @@ function HomePanel({ onStartSolo, onStartMulti, onOpenDeckBuilder }) {
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
   <ActionButton onClick={onStartSolo}>Solo</ActionButton>
   <ActionButton onClick={onStartMulti}>Multi</ActionButton>
+  <ActionButton onClick={onStartArena}>Arena / Tutoriel</ActionButton>
   <ActionButton onClick={() => onOpenDeckBuilder?.()}>Deck Builder</ActionButton>
 </div>
       </div>
@@ -1494,8 +1498,6 @@ return () => {
   } = gameState;
 
   const displayedSciencePeek = currentRoomId ? privateSciencePeek : sciencePeek;
-  const currentEra = Math.min(TOTAL_ERAS, Math.max(1, Math.ceil(turn / TURNS_PER_ERA)));
-  const turnInEra = ((turn - 1) % TURNS_PER_ERA) + 1;
 
   const pressureMap = useMemo(() => buildPressureMap(units), [units]);
   const productionPreview = useMemo(
@@ -1534,8 +1536,8 @@ return () => {
 
   return getValidBuildingPlacements(buildings, activePlayer, {
     mode: selectedCard.placement?.mode ?? "green_pair",
-    allowHorizontal: selectedCard.placement?.allowHorizontal ?? true,
-    allowVertical: selectedCard.placement?.allowVertical ?? true,
+    allowHorizontal: false,
+    allowVertical: true,
     size: selectedCard.placement?.size ?? 2,
   });
 }, [selectedCard, activePlayer, buildings]);
@@ -1613,6 +1615,15 @@ const setupSpawnCells = useMemo(
   }
 
   
+
+function handleStartArena() {
+  setCurrentRoomId("");
+  setLocalPlayer(null);
+  setRoomPlayerCount(0);
+  setGameMode("arena");
+  setAppPhase("arena");
+  setRoomMessage("Mode Arena lancé.");
+}
 
 function handleStartSolo() {
   const storedDeck = loadStoredSoloDeck();
@@ -2052,8 +2063,13 @@ if (appPhase === "home") {
       onStartSolo={handleStartSolo}
       onStartMulti={handleStartMulti}
       onOpenDeckBuilder={handleOpenDeckBuilder}
+      onStartArena={handleStartArena}
     />
   );
+}
+
+if (appPhase === "arena") {
+  return <Arena onBack={() => setAppPhase("home")} />;
 }
 
 if (appPhase === "deck_builder") {
@@ -2271,8 +2287,8 @@ if (appPhase === "setup") {
             alignItems: "stretch",
           }}
         >
-          <InfoCard label="Ère actuelle" value={`Ère ${currentEra}`} accent="rgba(168, 85, 247, 0.35)" />
-          <InfoCard label="Tour dans l'ère" value={`${turnInEra} / ${TURNS_PER_ERA}`} accent="rgba(59, 130, 246, 0.35)" />
+          <InfoCard label="Tour" value={`Tour ${turn}`} accent="rgba(168, 85, 247, 0.35)" />
+          <InfoCard label="Cartes globales" value="Points + Événement" accent="rgba(59, 130, 246, 0.35)" />
           <InfoCard label="Phase" value={currentPhase.label} accent="rgba(16, 185, 129, 0.35)" />
           <InfoCard label="Joueur actif" value={activePlayer ? `J${activePlayer}` : "Global"} accent="rgba(244, 114, 182, 0.35)" />
           {phase === "military_move" ? (
@@ -2420,7 +2436,6 @@ if (appPhase === "setup") {
     purchasePlayer={purchasePlayer}
     onSetPurchaseMode={handleSetPurchaseMode}
     activeEventCard={activeEventCard}
-    currentEra={currentEra}
   />
 ) : null}
 

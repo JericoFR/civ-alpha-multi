@@ -8,7 +8,7 @@ export const UNIT_DEFS = {
   },
   soldier: {
     key: "soldier",
-    name: "Soldat cac",
+    name: "Soldat",
     icon: "⚔️",
     movePoints: 2,
     cost: { food: 2, gold: 1 },
@@ -19,6 +19,20 @@ export const UNIT_DEFS = {
     icon: "🏹",
     movePoints: 2,
     cost: { food: 1, gold: 2 },
+  },
+  cavalry: {
+    key: "cavalry",
+    name: "Cavalerie",
+    icon: "🐎",
+    movePoints: 3,
+    cost: { food: 2, gold: 3 },
+  },
+  siege: {
+    key: "siege",
+    name: "Siège",
+    icon: "🛡️",
+    movePoints: 2,
+    cost: { food: 1, gold: 4 },
   },
 };
 

@@ -2,7 +2,7 @@ import { INITIAL_UNITS } from "../data/units.js";
 import { INITIAL_BUILDINGS } from "../data/buildings.js";
 import { INITIAL_HANDS } from "../data/cards.js";
 import { createInitialResources } from "../logic/economy.js";
-import { createShuffledEraDecks } from "../data/eraCards.js";
+import { createShuffledGlobalCardDecks } from "../data/eraCards.js";
 
 export const PHASES = [
   { key: "player_1", label: "Phase joueurs — J1", activePlayer: 1 },
@@ -84,7 +84,7 @@ function resolveStartingHands(customDecks = null) {
 }
 
 export function createInitialState(customDecks = null) {
-  const eraSetup = createShuffledEraDecks();
+  const globalCardSetup = createShuffledGlobalCardDecks();
   const startingHands = resolveStartingHands(customDecks);
 
   return {
@@ -150,14 +150,15 @@ export function createInitialState(customDecks = null) {
     sciencePeek: null,
     pendingDirectionUnitId: null,
 
-    activePointCard: eraSetup.activePointCard,
-    activeEventCard: eraSetup.activeEventCard,
-    remainingPointDeck: eraSetup.remainingPointDeck,
-    remainingEventDeck: eraSetup.remainingEventDeck,
+    activePointCard: globalCardSetup.activePointCard,
+    activeEventCard: globalCardSetup.activeEventCard,
+    remainingPointDeck: globalCardSetup.remainingPointDeck,
+    remainingEventDeck: globalCardSetup.remainingEventDeck,
+    lastCardChangeTurn: 0,
 
-    debugText: `Clique une unité pour la sélectionner. Ère I : ${
-      eraSetup.activePointCard?.name ?? "Aucune"
-    } / ${eraSetup.activeEventCard?.name ?? "Aucune"}.`,
+    debugText: `Clique une unité pour la sélectionner. Cartes globales : ${
+      globalCardSetup.activePointCard?.name ?? "Aucune"
+    } / ${globalCardSetup.activeEventCard?.name ?? "Aucune"}.`,
   };
 }
 

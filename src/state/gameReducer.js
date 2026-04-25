@@ -15,7 +15,7 @@ import {
   hasActivePersonalMarket,
   spendCost,
 } from "../logic/economy.js";
-import { resolveMilitaryPressure } from "../logic/pressure.js";
+import { buildPressureMap, resolveMilitaryPressure } from "../logic/pressure.js";
 import {
   getValidBuildingPlacements,
   getValidMilitarySpawnCells,
@@ -72,10 +72,19 @@ function getUnitPurchaseCost(unitType, activeEventCard = null) {
   }
 
   const def = UNIT_DEFS[unitType];
-  return {
+  const baseCost = {
     food: def?.cost?.food ?? 0,
     gold: def?.cost?.gold ?? 0,
   };
+
+  if (activeEventCard?.key === "military_subsidies") {
+    return {
+      ...baseCost,
+      gold: Math.max(0, baseCost.gold - 1),
+    };
+  }
+
+  return baseCost;
 }
 
 function createSpawnedUnit(type, player, x, y, unitId = null) {
@@ -96,14 +105,11 @@ function getValidSpawnCellsForPurchaseMode(state, player, mode) {
     return getValidWorkerSpawnCells(state.buildings, state.units, player);
   }
 
-  const currentEra = Math.ceil(state.turn / 10);
-
   return getValidMilitarySpawnCells(
     state.buildings,
     state.units,
     player,
-    mode,
-    currentEra
+    mode
   );
 }
 
@@ -236,7 +242,65 @@ function getCompletedTurn(state, nextPhaseKey) {
   return nextPhaseKey === PHASES[0].key ? state.turn : null;
 }
 
-function applyEraEndScoring(state, completedTurn, draftState) {
+function getActiveOwnBuildings(state, player) {
+  return state.buildings.filter(
+    (building) =>
+      building.player === player &&
+      !building.isBurning &&
+      building.isActive !== false
+  );
+}
+
+function buildingMatchesRequirement(building, requirement) {
+  if (!building || !requirement) return false;
+  return building.type === requirement || building.sourceCardKey === requirement;
+}
+
+function hasActiveBuildingRequirement(state, player, requirement) {
+  return getActiveOwnBuildings(state, player).some((building) =>
+    buildingMatchesRequirement(building, requirement)
+  );
+}
+
+function checkCardRequirements(state, player, card) {
+  const requirements = card.requirements ?? {};
+  const missing = [];
+
+  for (const requirement of requirements.buildings ?? []) {
+    if (!hasActiveBuildingRequirement(state, player, requirement)) {
+      missing.push(requirement);
+    }
+  }
+
+  const activeOwnBuildings = getActiveOwnBuildings(state, player);
+
+  if (
+    typeof requirements.minOwnBuildings === "number" &&
+    activeOwnBuildings.length < requirements.minOwnBuildings
+  ) {
+    missing.push(`${requirements.minOwnBuildings} bâtiment(s) actif(s)`);
+  }
+
+  if (
+    typeof requirements.minRomanBuildings === "number" &&
+    activeOwnBuildings.filter((building) =>
+      ["aqueduct", "castrum", "forum", "coliseum"].includes(building.sourceCardKey)
+    ).length < requirements.minRomanBuildings
+  ) {
+    missing.push(`${requirements.minRomanBuildings} bâtiment(s) romain(s) actif(s)`);
+  }
+
+  if (requirements.controlCenter && !getCentralMarketStatus(state.units, player).isControlled) {
+    missing.push("contrôle du centre");
+  }
+
+  return {
+    ok: missing.length === 0,
+    missing,
+  };
+}
+
+function applyGlobalPointScoring(state, completedTurn, draftState) {
   let nextState = draftState;
   const debugParts = [];
 
@@ -265,7 +329,7 @@ function applyEraEndScoring(state, completedTurn, draftState) {
     }
   }
 
-  if (completedTurn % 10 === 0 && state.activePointCard?.key === "demographic_growth") {
+  if (state.activePointCard?.key === "demographic_growth") {
     const j1Units = state.units.filter((unit) => unit.player === 1).length;
     const j2Units = state.units.filter((unit) => unit.player === 2).length;
     const j1Gain = Math.floor(j1Units / 2);
@@ -287,52 +351,76 @@ function applyEraEndScoring(state, completedTurn, draftState) {
         points: nextPoints,
       };
 
-      debugParts.push(`Fin d'ère démographie : J1 +${j1Gain} / J2 +${j2Gain}`);
+      debugParts.push(`Croissance démographique : J1 +${j1Gain} / J2 +${j2Gain}`);
+    }
+  }
+
+  if (state.activePointCard?.key === "science_dominance") {
+    const winner = getScienceWinner(state.buildings, state.units);
+
+    if (winner.player) {
+      nextState = {
+        ...nextState,
+        points: addPointsToAxis(nextState.points, winner.playerKey, "eco", 1),
+      };
+      debugParts.push(`Supériorité scientifique : J${winner.player} +1 PV`);
+    }
+  }
+
+  if (state.activePointCard?.key === "military_pressure") {
+    const pressureMap = buildPressureMap(state.units);
+    const playersWithPressure = new Set();
+
+    for (const unit of state.units) {
+      const entry = pressureMap[`${unit.x},${unit.y}`];
+      if (!entry) continue;
+
+      const enemyPressure = unit.player === 1 ? entry.player2 ?? 0 : entry.player1 ?? 0;
+      const threshold = unit.type === "worker" || unit.type === "siege" ? 1 : 2;
+
+      if (enemyPressure >= threshold) {
+        playersWithPressure.add(unit.player === 1 ? 2 : 1);
+      }
+    }
+
+    if (playersWithPressure.has(1)) {
+      nextState = {
+        ...nextState,
+        points: addPointsToAxis(nextState.points, "player1", "military", 1),
+      };
+      debugParts.push("Pression militaire : J1 +1 PV");
+    }
+
+    if (playersWithPressure.has(2)) {
+      nextState = {
+        ...nextState,
+        points: addPointsToAxis(nextState.points, "player2", "military", 1),
+      };
+      debugParts.push("Pression militaire : J2 +1 PV");
     }
   }
 
   return { nextState, debugParts };
 }
 
-function maybeAdvanceEraCards(state, nextState, completedTurn) {
-  if (completedTurn == null || completedTurn % 10 !== 0) {
-    return nextState;
+function drawNextGlobalCard(state, type) {
+  if (type === "points") {
+    const nextCard = state.remainingPointDeck?.[0] ?? null;
+    return {
+      activeCard: nextCard,
+      remainingDeck: state.remainingPointDeck?.slice(1) ?? [],
+    };
   }
 
-  if (completedTurn >= 40) {
-    return nextState;
+  if (type === "event") {
+    const nextCard = state.remainingEventDeck?.[0] ?? null;
+    return {
+      activeCard: nextCard,
+      remainingDeck: state.remainingEventDeck?.slice(1) ?? [],
+    };
   }
 
-  const nextPointCard = state.remainingPointDeck[0] ?? null;
-  const nextEventCard = state.remainingEventDeck[0] ?? null;
-
-  const transitionedState = {
-    ...nextState,
-    activePointCard: nextPointCard,
-    activeEventCard: nextEventCard,
-    remainingPointDeck: state.remainingPointDeck.slice(1),
-    remainingEventDeck: state.remainingEventDeck.slice(1),
-    debugText: `Nouvelle phase : ${
-      getPhaseDefinition(nextState.phase).label
-    } | Nouvelle ère : ${nextPointCard?.name ?? "Aucune"} / ${
-      nextEventCard?.name ?? "Aucune"
-    }.`,
-  };
-
-  const overflowPlayers = getOverflowPlayers(
-    transitionedState.buildings,
-    transitionedState.units,
-    nextEventCard
-  );
-
-  return {
-    ...transitionedState,
-    pendingHousingSacrificePlayers: overflowPlayers,
-    debugText:
-      overflowPlayers.length > 0
-        ? `${transitionedState.debugText} ${formatOverflowMessage(overflowPlayers)}`
-        : transitionedState.debugText,
-  };
+  return { activeCard: null, remainingDeck: [] };
 }
 
 function buildPhaseTransitionState(state, nextPhaseKey) {
@@ -356,32 +444,42 @@ function buildPhaseTransitionState(state, nextPhaseKey) {
     militaryConsecutivePasses: 0,
     productionDoneThisPhase: false,
     militaryResolutionDoneThisPhase: false,
-buyPasses: {
-  player1: false,
-  player2: false,
-},
-
-economyPasses: {
-  player1: false,
-  player2: false,
-},
-
+    buyPasses: {
+      player1: false,
+      player2: false,
+    },
+    economyPasses: {
+      player1: false,
+      player2: false,
+    },
     scienceActionUsedThisPhase: false,
     sciencePeek: null,
     debugText: `Nouvelle phase : ${phaseDef.label}`,
   };
 
-  const eraScoring = applyEraEndScoring(state, completedTurn, nextState);
-  nextState = eraScoring.nextState;
+  const globalScoring = applyGlobalPointScoring(state, completedTurn, nextState);
+  nextState = globalScoring.nextState;
 
-  if (eraScoring.debugParts.length > 0) {
+  if (globalScoring.debugParts.length > 0) {
     nextState = {
       ...nextState,
-      debugText: `${nextState.debugText} | ${eraScoring.debugParts.join(" ; ")}`,
+      debugText: `${nextState.debugText} | ${globalScoring.debugParts.join(" ; ")}`,
     };
   }
 
-  nextState = maybeAdvanceEraCards(state, nextState, completedTurn);
+  const overflowPlayers = getOverflowPlayers(
+    nextState.buildings,
+    nextState.units,
+    nextState.activeEventCard
+  );
+
+  if (overflowPlayers.length > 0) {
+    nextState = {
+      ...nextState,
+      pendingHousingSacrificePlayers: overflowPlayers,
+      debugText: `${nextState.debugText} ${formatOverflowMessage(overflowPlayers)}`,
+    };
+  }
 
   if (nextPhaseKey !== "military_move") {
     return nextState;
@@ -551,12 +649,12 @@ export function gameReducer(state, action) {
 
       if (!card) return state;
 
-      const currentEra = Math.ceil(state.turn / 10);
+      const requirementCheck = checkCardRequirements(state, player, card);
 
-      if (currentEra < card.era) {
+      if (!requirementCheck.ok) {
         return {
           ...state,
-          debugText: `${card.name} nécessite l’ère ${card.era}.`,
+          debugText: `${card.name} ne remplit pas les prérequis : ${requirementCheck.missing.join(", ")}.`,
         };
       }
 
@@ -865,13 +963,11 @@ export function gameReducer(state, action) {
         };
       }
 
-      const currentEra = Math.ceil(state.turn / 10);
       const validCells = getValidMilitarySpawnCells(
   state.buildings,
   state.units,
   player,
-  unitType,
-  currentEra
+  unitType
 );
       const isValid = validCells.some((cell) => cell.x === x && cell.y === y);
 
@@ -1130,8 +1226,15 @@ if (unitType === "archer") {
   };
 }
 
+      const buildingBurnThreshold =
+        state.activeEventCard?.key === "instability"
+          ? 2
+          : state.activeEventCard?.key === "fortifications"
+          ? 4
+          : 3;
+
       const result = resolveMilitaryPressure(state.units, state.buildings, {
-        buildingBurnThreshold: state.activeEventCard?.key === "instability" ? 2 : 3,
+        buildingBurnThreshold,
       });
 
       const overflowPlayers = getOverflowPlayers(
@@ -1158,6 +1261,19 @@ if (unitType === "archer") {
         nextPoints = addPointsToAxis(nextPoints, "player2", "military", militaryPointsP2);
       }
 
+      const warAgeBonusP1 =
+        state.activePointCard?.key === "war_age" ? result.destroyedUnits.filter((unit) => unit.player === 2).length : 0;
+      const warAgeBonusP2 =
+        state.activePointCard?.key === "war_age" ? result.destroyedUnits.filter((unit) => unit.player === 1).length : 0;
+
+      if (warAgeBonusP1 > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player1", "military", warAgeBonusP1);
+      }
+
+      if (warAgeBonusP2 > 0) {
+        nextPoints = addPointsToAxis(nextPoints, "player2", "military", warAgeBonusP2);
+      }
+
       const coliseumBonusP1 =
         result.destroyedByPlayer?.player1 > 0 && hasActiveColiseum(result.buildings, 1) ? 1 : 0;
       const coliseumBonusP2 =
@@ -1181,13 +1297,13 @@ if (unitType === "archer") {
         debugText:
           overflowPlayers.length > 0
             ? `${buildMilitaryResolutionDebug(result)}${
-                coliseumBonusP1 > 0 || coliseumBonusP2 > 0
-                  ? ` Colisée :${coliseumBonusP1 > 0 ? ` J1 +${coliseumBonusP1} PV.` : ""}${coliseumBonusP2 > 0 ? ` J2 +${coliseumBonusP2} PV.` : ""}`
+                coliseumBonusP1 > 0 || coliseumBonusP2 > 0 || warAgeBonusP1 > 0 || warAgeBonusP2 > 0
+                  ? `${coliseumBonusP1 > 0 || coliseumBonusP2 > 0 ? ` Colisée :${coliseumBonusP1 > 0 ? ` J1 +${coliseumBonusP1} PV.` : ""}${coliseumBonusP2 > 0 ? ` J2 +${coliseumBonusP2} PV.` : ""}` : ""}${warAgeBonusP1 > 0 || warAgeBonusP2 > 0 ? ` Âge de la Guerre :${warAgeBonusP1 > 0 ? ` J1 +${warAgeBonusP1} PV.` : ""}${warAgeBonusP2 > 0 ? ` J2 +${warAgeBonusP2} PV.` : ""}` : ""}`
                   : ""
               } ${formatOverflowMessage(overflowPlayers)}`
             : `${buildMilitaryResolutionDebug(result)}${
-                coliseumBonusP1 > 0 || coliseumBonusP2 > 0
-                  ? ` Colisée :${coliseumBonusP1 > 0 ? ` J1 +${coliseumBonusP1} PV.` : ""}${coliseumBonusP2 > 0 ? ` J2 +${coliseumBonusP2} PV.` : ""}`
+                coliseumBonusP1 > 0 || coliseumBonusP2 > 0 || warAgeBonusP1 > 0 || warAgeBonusP2 > 0
+                  ? `${coliseumBonusP1 > 0 || coliseumBonusP2 > 0 ? ` Colisée :${coliseumBonusP1 > 0 ? ` J1 +${coliseumBonusP1} PV.` : ""}${coliseumBonusP2 > 0 ? ` J2 +${coliseumBonusP2} PV.` : ""}` : ""}${warAgeBonusP1 > 0 || warAgeBonusP2 > 0 ? ` Âge de la Guerre :${warAgeBonusP1 > 0 ? ` J1 +${warAgeBonusP1} PV.` : ""}${warAgeBonusP2 > 0 ? ` J2 +${warAgeBonusP2} PV.` : ""}` : ""}`
                   : ""
               }`,
       };
@@ -1222,6 +1338,13 @@ if (unitType === "archer") {
         return {
           ...state,
           debugText: `Le choix du marché est déjà verrouillé pour J${player} sur cette phase.`,
+        };
+      }
+
+      if (marketType === "personal" && state.activeEventCard?.key === "blockade") {
+        return {
+          ...state,
+          debugText: "Blocus actif : les Marchés personnels ne peuvent pas être utilisés.",
         };
       }
 
@@ -1293,6 +1416,13 @@ if (unitType === "archer") {
       }
 
       if (selectedMarket === "personal") {
+        if (state.activeEventCard?.key === "blockade") {
+          return {
+            ...state,
+            debugText: "Blocus actif : les Marchés personnels ne peuvent pas être utilisés.",
+          };
+        }
+
         if (!hasActivePersonalMarket(state.buildings, state.units, player)) {
           return {
             ...state,
@@ -1396,16 +1526,36 @@ if (unitType === "archer") {
         },
       };
 
+      let nextPoints = state.points;
+      const productionPointParts = [];
+
+      if (state.activePointCard?.key === "economic_expansion") {
+        const p1TotalProduced = (result.produced.player1.food ?? 0) + (result.produced.player1.gold ?? 0);
+        const p2TotalProduced = (result.produced.player2.food ?? 0) + (result.produced.player2.gold ?? 0);
+
+        if (p1TotalProduced >= 3) {
+          nextPoints = addPointsToAxis(nextPoints, "player1", "eco", 1);
+          productionPointParts.push("Expansion économique : J1 +1 PV");
+        }
+
+        if (p2TotalProduced >= 3) {
+          nextPoints = addPointsToAxis(nextPoints, "player2", "eco", 1);
+          productionPointParts.push("Expansion économique : J2 +1 PV");
+        }
+      }
+
       return {
         ...state,
         resources: nextResources,
+        points: nextPoints,
         resourceVersion: (state.resourceVersion ?? 0) + 1,
         productionDoneThisPhase: true,
         debugText:
           `Production — J1: ${formatProductionBundle(result.produced.player1)} | ` +
           `J2: ${formatProductionBundle(result.produced.player2)} | ` +
           `Stocks → J1 ${nextResources.player1.food}/${nextResources.player1.gold} · ` +
-          `J2 ${nextResources.player2.food}/${nextResources.player2.gold}`,
+          `J2 ${nextResources.player2.food}/${nextResources.player2.gold}` +
+          (productionPointParts.length > 0 ? ` | ${productionPointParts.join(" ; ")}` : ""),
       };
     }
         case "OPEN_SCIENCE_PEEK": {
@@ -1485,6 +1635,86 @@ if (unitType === "archer") {
       };
     }
 
+    case "CHANGE_GLOBAL_CARD": {
+      const { type } = action.payload ?? {};
+
+      if (!["points", "event"].includes(type)) {
+        return {
+          ...state,
+          debugText: "Type de carte globale invalide.",
+        };
+      }
+
+      if (state.lastCardChangeTurn === state.turn) {
+        return {
+          ...state,
+          debugText: "Une carte Points ou Événement a déjà été changée ce tour.",
+        };
+      }
+
+      const winner = getScienceWinner(state.buildings, state.units);
+
+      if (action.player && winner.player && action.player !== winner.player) {
+        return {
+          ...state,
+          debugText: `Action refusée : seule la science de J${winner.player} peut changer une carte.`,
+        };
+      }
+
+      if (!winner.player && !action.payload?.force) {
+        return {
+          ...state,
+          debugText: `Égalité scientifique : J1 ${winner.totals.player1} / J2 ${winner.totals.player2}. Aucune carte changée.`,
+        };
+      }
+
+      if (type === "points") {
+        const next = drawNextGlobalCard(state, "points");
+
+        if (!next.activeCard) {
+          return {
+            ...state,
+            debugText: "La pile Points est vide.",
+          };
+        }
+
+        return {
+          ...state,
+          activePointCard: next.activeCard,
+          remainingPointDeck: next.remainingDeck,
+          lastCardChangeTurn: state.turn,
+          scienceActionUsedThisPhase: state.phase === "science" ? true : state.scienceActionUsedThisPhase,
+          sciencePeek: null,
+          debugText: `Carte Points changée : ${next.activeCard.name}.`,
+        };
+      }
+
+      const next = drawNextGlobalCard(state, "event");
+
+      if (!next.activeCard) {
+        return {
+          ...state,
+          debugText: "La pile Événement est vide.",
+        };
+      }
+
+      const overflowPlayers = getOverflowPlayers(state.buildings, state.units, next.activeCard);
+
+      return {
+        ...state,
+        activeEventCard: next.activeCard,
+        remainingEventDeck: next.remainingDeck,
+        lastCardChangeTurn: state.turn,
+        scienceActionUsedThisPhase: state.phase === "science" ? true : state.scienceActionUsedThisPhase,
+        sciencePeek: null,
+        pendingHousingSacrificePlayers: overflowPlayers,
+        debugText:
+          overflowPlayers.length > 0
+            ? `Carte Événement changée : ${next.activeCard.name}. ${formatOverflowMessage(overflowPlayers)}`
+            : `Carte Événement changée : ${next.activeCard.name}.`,
+      };
+    }
+
     case "DEBUG_SPAWN_WORKER_J1": {
       return {
         ...state,
@@ -1530,6 +1760,7 @@ if (unitType === "archer") {
         activeEventCard: eraState.activeEventCard ?? state.activeEventCard,
         remainingPointDeck: eraState.remainingPointDeck ?? state.remainingPointDeck,
         remainingEventDeck: eraState.remainingEventDeck ?? state.remainingEventDeck,
+        lastCardChangeTurn: eraState.lastCardChangeTurn ?? state.lastCardChangeTurn,
       };
     }
 
