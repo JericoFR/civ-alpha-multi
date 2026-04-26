@@ -38,6 +38,70 @@ function getPlayerKey(player) {
   return player === 1 ? "player1" : "player2";
 }
 
+function getLeaderRuntimeState(state, player) {
+  const playerKey = getPlayerKey(player);
+  return state.leaderState?.[playerKey] ?? {};
+}
+
+function hasLeader(state, player, leaderKey) {
+  const playerKey = getPlayerKey(player);
+  return state.leaders?.[playerKey] === leaderKey;
+}
+
+function getCardPlayCost(state, player, card) {
+  const baseCost = card?.cost ?? {};
+  const playerKey = getPlayerKey(player);
+
+  if (
+    card?.key === "barracks_1" &&
+    hasLeader(state, player, "julius_caesar") &&
+    !getLeaderRuntimeState(state, player).caesarFirstBarracksDiscountUsed
+  ) {
+    return {
+      ...baseCost,
+      gold: Math.max(0, (baseCost.gold ?? 0) - 2),
+    };
+  }
+
+  return baseCost;
+}
+
+function isRomanBuildingCard(card) {
+  return card?.category === "building" && card?.civilization === "roman";
+}
+
+function buildLeaderStateAfterCardPlay(state, player, card) {
+  const playerKey = getPlayerKey(player);
+  const currentPlayerLeaderState = getLeaderRuntimeState(state, player);
+
+  return {
+    ...(state.leaderState ?? {}),
+    [playerKey]: {
+      ...currentPlayerLeaderState,
+      caesarFirstBarracksDiscountUsed:
+        currentPlayerLeaderState.caesarFirstBarracksDiscountUsed ||
+        (card?.key === "barracks_1" && hasLeader(state, player, "julius_caesar")),
+      romanBuildingPlayedThisTurn:
+        currentPlayerLeaderState.romanBuildingPlayedThisTurn || isRomanBuildingCard(card),
+    },
+  };
+}
+
+function resetLeaderTurnFlags(state) {
+  const previousLeaderState = state.leaderState ?? {};
+
+  return {
+    player1: {
+      ...(previousLeaderState.player1 ?? {}),
+      romanBuildingPlayedThisTurn: false,
+    },
+    player2: {
+      ...(previousLeaderState.player2 ?? {}),
+      romanBuildingPlayedThisTurn: false,
+    },
+  };
+}
+
 function normalizePlayerPoints(pointsEntry) {
   if (typeof pointsEntry === "number") {
     return {
@@ -66,21 +130,33 @@ function addPointsToAxis(pointsState, playerKey, axis, amount) {
   };
 }
 
-function getUnitPurchaseCost(unitType, activeEventCard = null) {
+function getUnitPurchaseCost(unitType, activeEventCard = null, state = null, player = null) {
   if (unitType === "worker") {
     return { food: getWorkerFoodCost(activeEventCard), gold: 0 };
   }
 
   const def = UNIT_DEFS[unitType];
-  const baseCost = {
+  let baseCost = {
     food: def?.cost?.food ?? 0,
     gold: def?.cost?.gold ?? 0,
   };
 
   if (activeEventCard?.key === "military_subsidies") {
-    return {
+    baseCost = {
       ...baseCost,
       gold: Math.max(0, baseCost.gold - 1),
+    };
+  }
+
+  if (
+    state &&
+    player &&
+    hasLeader(state, player, "julius_caesar") &&
+    getLeaderRuntimeState(state, player).romanBuildingPlayedThisTurn
+  ) {
+    baseCost = {
+      ...baseCost,
+      gold: Math.max(1, (baseCost.gold ?? 0) - 1),
     };
   }
 
@@ -454,6 +530,7 @@ function buildPhaseTransitionState(state, nextPhaseKey) {
     },
     scienceActionUsedThisPhase: false,
     sciencePeek: null,
+    leaderState: startsNewTurn ? resetLeaderTurnFlags(state) : state.leaderState,
     debugText: `Nouvelle phase : ${phaseDef.label}`,
   };
 
@@ -686,7 +763,9 @@ export function gameReducer(state, action) {
         };
       }
 
-      if (!canAfford(state.resources[playerKey], card.cost)) {
+      const cardPlayCost = getCardPlayCost(state, player, card);
+
+      if (!canAfford(state.resources[playerKey], cardPlayCost)) {
         return {
           ...state,
           debugText: `Pas assez de ressources pour jouer ${card.name}.`,
@@ -727,13 +806,15 @@ export function gameReducer(state, action) {
 
       const nextResources = {
         ...state.resources,
-        [playerKey]: spendCost(state.resources[playerKey], card.cost),
+        [playerKey]: spendCost(state.resources[playerKey], cardPlayCost),
       };
 
       const nextBuildings = [
         ...state.buildings,
         createBuilding(card.createsBuildingType, player, x, y, orientation, card.key),
       ];
+
+      const nextLeaderState = buildLeaderStateAfterCardPlay(state, player, card);
 
       const buildersBonus = state.activePointCard?.key === "builders_age" ? 2 : 0;
       const buildPointsGained = (card.buildPoints ?? 1) + buildersBonus;
@@ -747,6 +828,7 @@ export function gameReducer(state, action) {
           [playerKey]: nextHand,
         },
         points: addPointsToAxis(state.points, playerKey, "build", buildPointsGained),
+        leaderState: nextLeaderState,
         selectedCardKey: null,
         purchaseMode: null,
         purchasePlayer: null,
@@ -800,7 +882,7 @@ export function gameReducer(state, action) {
       }
 
       const playerKey = getPlayerKey(player);
-      const cost = getUnitPurchaseCost(mode, state.activeEventCard);
+      const cost = getUnitPurchaseCost(mode, state.activeEventCard, state, player);
 
       if (!canAfford(state.resources[playerKey], cost)) {
         return {
@@ -940,7 +1022,7 @@ export function gameReducer(state, action) {
       }
 
       const playerKey = getPlayerKey(player);
-      const cost = getUnitPurchaseCost(unitType, state.activeEventCard);
+      const cost = getUnitPurchaseCost(unitType, state.activeEventCard, state, player);
 
       if (!canAfford(state.resources[playerKey], cost)) {
         return {

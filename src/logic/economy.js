@@ -87,6 +87,43 @@ function createEmptyProduction() {
   return { food: 0, gold: 0 };
 }
 
+function manhattanDistance(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+
+function isEconomicBuilding(building) {
+  if (!building) return false;
+
+  const def = BUILDING_DEFS[building.type];
+  const subCategory = def?.subCategory ?? null;
+
+  return (
+    subCategory === "economic" ||
+    subCategory === "economy" ||
+    building.type === "market" ||
+    building.type === "forum" ||
+    building.type === "nil_farm"
+  );
+}
+
+function hasEconomicBuildingWithinTwoCells(building, buildings) {
+  const sourceCells = normalizeBuildingCells(building);
+
+  return buildings.some((otherBuilding) => {
+    if (!otherBuilding) return false;
+    if (otherBuilding.id === building.id) return false;
+    if (otherBuilding.player !== building.player) return false;
+    if (!isBuildingOperational(otherBuilding)) return false;
+    if (!isEconomicBuilding(otherBuilding)) return false;
+
+    const targetCells = normalizeBuildingCells(otherBuilding);
+
+    return sourceCells.some((sourceCell) =>
+      targetCells.some((targetCell) => manhattanDistance(sourceCell, targetCell) <= 2)
+    );
+  });
+}
+
 function getOperationalRomanBuildings(buildings, player, sourceCardKey) {
   return buildings.filter(
     (b) =>
@@ -138,6 +175,13 @@ export function getProductionPreviewForPlayer(buildings, units, player, activeEv
     );
 
     if (def.resource === "food" && hasAqueduct) {
+      totalGain += 1;
+    }
+
+    // 🏺 FERME DU NIL
+    // Bonus : +1 🌾 si un bâtiment économique allié actif est à 2 cases ou moins.
+    // Distance calculée entre les cases occupées par les bâtiments, en distance Manhattan.
+    if (building.type === "nil_farm" && hasEconomicBuildingWithinTwoCells(building, buildings)) {
       totalGain += 1;
     }
 

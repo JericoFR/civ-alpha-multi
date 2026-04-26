@@ -1,5 +1,6 @@
 import { BOARD } from "../data/board.js";
 import { UNIT_DEFS } from "../data/units.js";
+import { normalizeBuildingCells } from "./buildings.js";
 
 export function makeCellKey(x, y) {
   return `${x},${y}`;

@@ -1,6 +1,6 @@
 import { INITIAL_UNITS } from "../data/units.js";
 import { INITIAL_BUILDINGS } from "../data/buildings.js";
-import { INITIAL_HANDS } from "../data/cards.js";
+import { CARD_DEFS, INITIAL_HANDS } from "../data/cards.js";
 import { createInitialResources } from "../logic/economy.js";
 import { createShuffledGlobalCardDecks } from "../data/eraCards.js";
 
@@ -49,6 +49,29 @@ function normalizeDeckCards(deckLike) {
   return [];
 }
 
+function splitLeaderFromCards(cardKeys) {
+  const remainingCards = [];
+  let leaderKey = null;
+
+  for (const cardKey of cardKeys ?? []) {
+    const card = CARD_DEFS[cardKey];
+
+    if (card?.category === "leader") {
+      if (!leaderKey) {
+        leaderKey = cardKey;
+      }
+      continue;
+    }
+
+    remainingCards.push(cardKey);
+  }
+
+  return {
+    cards: remainingCards,
+    leaderKey,
+  };
+}
+
 function ensureStartingHands(hands) {
   const clonedHands = structuredClone(hands ?? { player1: [], player2: [] });
 
@@ -85,7 +108,17 @@ function resolveStartingHands(customDecks = null) {
 
 export function createInitialState(customDecks = null) {
   const globalCardSetup = createShuffledGlobalCardDecks();
-  const startingHands = resolveStartingHands(customDecks);
+  const rawStartingHands = resolveStartingHands(customDecks);
+  const player1LeaderSplit = splitLeaderFromCards(rawStartingHands.player1);
+  const player2LeaderSplit = splitLeaderFromCards(rawStartingHands.player2);
+  const startingHands = {
+    player1: player1LeaderSplit.cards,
+    player2: player2LeaderSplit.cards,
+  };
+  const leaders = {
+    player1: player1LeaderSplit.leaderKey,
+    player2: player2LeaderSplit.leaderKey,
+  };
 
   return {
     turn: 1,
@@ -110,6 +143,17 @@ export function createInitialState(customDecks = null) {
     },
 
     cards: startingHands,
+    leaders,
+    leaderState: {
+      player1: {
+        caesarFirstBarracksDiscountUsed: false,
+        romanBuildingPlayedThisTurn: false,
+      },
+      player2: {
+        caesarFirstBarracksDiscountUsed: false,
+        romanBuildingPlayedThisTurn: false,
+      },
+    },
 
     selectedUnitId: null,
     selectedCardKey: null,

@@ -234,7 +234,6 @@ forum: {
   tags: ["building", "economy", "roman"],
   buildPoints: 1,
   cost: { gold: 2 },
-  requirements: { buildings: ["market"], minOwnBuildings: 2 },
   text:
     "+1 💰 de base. +1 💰 si un ouvrier actif est dedans. +1 💰 si tu contrôles le centre.",
   placement: {
@@ -271,14 +270,40 @@ allowVertical: true,
 },
 
 
+julius_caesar: {
+  key: "julius_caesar",
+  id: "julius_caesar",
+  name: "Jules César",
+  category: "leader",
+  subCategory: "military",
+  civilization: "roman",
+  tags: ["leader", "military", "roman"],
+  cost: {},
+  text:
+    "Leader romain. Ta première Caserne I coûte -2 💰. Si tu as posé un bâtiment romain ce tour, tes recrutements militaires coûtent -1 💰 (minimum 1).",
+},
 
-
-
-
-
-
-
-
+nil_farm: {
+  key: "nil_farm",
+  id: "nil_farm",
+  name: "Ferme du Nil",
+  category: "building",
+  subCategory: "economic",
+  civilization: "egyptian",
+  tags: ["building", "production", "food", "economic", "egyptian"],
+  buildPoints: 1,
+  cost: { gold: 3 },
+  text:
+    "+2 🌾 nourriture. +1 🌾 supplémentaire si un bâtiment économique allié actif est à 2 cases ou moins.",
+  placement: {
+    mode: "green_pair",
+    size: 2,
+    allowHorizontal: false,
+    allowVertical: true,
+    ownerOnly: true,
+  },
+  createsBuildingType: "nil_farm",
+},
 
 
 
@@ -305,6 +330,7 @@ const BUILDING_TYPE_TO_CARD_KEY = {
   castrum: "castrum",
   forum: "forum",
   coliseum: "coliseum",
+  nil_farm: "nil_farm",
 };
 
 function unique(values) {

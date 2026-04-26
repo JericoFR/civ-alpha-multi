@@ -23,6 +23,8 @@ import { buildPressureMap } from "./logic/pressure";
 import { gameReducer } from "./state/gameReducer";
 import { createInitialState, getPhaseDefinition, initialState } from "./state/initialState";
 
+const TURNS_PER_ERA = 10;
+const TOTAL_ERAS = 4;
 
 
 const SETUP_STEPS = [
@@ -399,7 +401,7 @@ function CardButton({
       </div>
 
       <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 6 }}>
-        {card.category} · {card.subCategory}
+        Ère {card.era} · {card.category} · {card.subCategory}
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 700 }}>
@@ -886,7 +888,7 @@ function ScienceCompactPanel({ phase, buildings, units, scienceActionUsedThisPha
       </div>
       <div style={{ fontSize: 13, opacity: 0.82 }}>
         {winner.player
-          ? `J${winner.player} a strictement le plus de science et peut regarder 1 prochaine carte globale.`
+          ? `J${winner.player} a strictement le plus de science et peut regarder 1 prochaine carte d’ère.`
           : "Égalité scientifique : personne n’active l’effet ce tour."}
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -1498,7 +1500,7 @@ return () => {
   } = gameState;
 
   const displayedSciencePeek = currentRoomId ? privateSciencePeek : sciencePeek;
-
+  
   const pressureMap = useMemo(() => buildPressureMap(units), [units]);
   const productionPreview = useMemo(
     () => getProductionPreview(buildings, units, activeEventCard),
@@ -1536,8 +1538,8 @@ return () => {
 
   return getValidBuildingPlacements(buildings, activePlayer, {
     mode: selectedCard.placement?.mode ?? "green_pair",
-    allowHorizontal: false,
-    allowVertical: true,
+    allowHorizontal: selectedCard.placement?.allowHorizontal ?? false,
+    allowVertical: selectedCard.placement?.allowVertical ?? true,
     size: selectedCard.placement?.size ?? 2,
   });
 }, [selectedCard, activePlayer, buildings]);
@@ -2320,6 +2322,7 @@ if (appPhase === "setup") {
             points={points.player1}
             production={productionPreview.player1}
             science={sciencePreview.player1}
+            leaderKey={gameState.leaders?.player1}
           >
             <HandPanel
               player={1}
@@ -2595,6 +2598,7 @@ if (appPhase === "setup") {
             points={points.player2}
             production={productionPreview.player2}
             science={sciencePreview.player2}
+            leaderKey={gameState.leaders?.player2}
           >
             <HandPanel
               player={2}

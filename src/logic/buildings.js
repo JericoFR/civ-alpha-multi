@@ -66,7 +66,6 @@ function canRecruitFromBuilding(building, units) {
 
   if (hasWorker) return true;
 
-  // Nouveau système sans ères : le Castrum garde son identité de caserne romaine autonome.
   if (building.sourceCardKey === "castrum") return true;
 
   return false;
@@ -154,18 +153,10 @@ export function getValidMilitarySpawnCells(
 }
 
 function getCellOwner(x, y) {
-  // Base J1
   if (y >= 0 && y <= 4) return 1;
-
-  // Base J2
   if (y >= 13 && y <= 18) return 2;
-
-  // No man's land constructible J1
   if ((x === 3 || x === 9) && y >= 7 && y <= 8) return 1;
-
-  // No man's land constructible J2
   if ((x === 3 || x === 9) && y >= 10 && y <= 11) return 2;
-
   return null;
 }
 
@@ -223,30 +214,14 @@ function getDefenseCellOwner(buildings, x, y) {
 }
 
 function isValidVerticalAnchorForGreenSlot(y) {
-  // Base J1 : slots verticaux autorisés = 0-1 et 2-3
-  if (y >= 0 && y <= 4) {
-    return y === 0 || y === 2;
-  }
-
-  // Base J2 : slots verticaux autorisés = 15-16 et 17-18
-  if (y >= 15 && y <= 18) {
-    return y === 15 || y === 17;
-  }
-
-  // No man's land J1 : 7-8
-  if (y >= 7 && y <= 8) {
-    return y === 7;
-  }
-
-  // No man's land J2 : 10-11
-  if (y >= 10 && y <= 11) {
-    return y === 10;
-  }
-
+  if (y >= 0 && y <= 4) return y === 0 || y === 2;
+  if (y >= 15 && y <= 18) return y === 15 || y === 17;
+  if (y >= 7 && y <= 8) return y === 7;
+  if (y >= 10 && y <= 11) return y === 10;
   return false;
 }
 
-function respectsSlotAnchoring({ x, y, orientation, expectedTerrain, size }) {
+function respectsSlotAnchoring({ y, orientation, expectedTerrain, size }) {
   if (expectedTerrain !== "vert") return true;
   if (size !== 2) return true;
 
@@ -267,15 +242,7 @@ function canPlacePair({
   orientation,
   expectedTerrain,
 }) {
-  if (
-    !respectsSlotAnchoring({
-      x,
-      y,
-      orientation,
-      expectedTerrain,
-      size,
-    })
-  ) {
+  if (!respectsSlotAnchoring({ y, orientation, expectedTerrain, size })) {
     return false;
   }
 
@@ -298,9 +265,7 @@ function canPlacePair({
   );
   if (!allOnExpectedTerrain) return false;
 
-  const allFree = cells.every(
-    (cell) => !occupied.has(`${cell.x},${cell.y}`)
-  );
+  const allFree = cells.every((cell) => !occupied.has(`${cell.x},${cell.y}`));
   if (!allFree) return false;
 
   return true;
@@ -352,7 +317,21 @@ export function getValidBuildingPlacements(
         results.push({ x, y, orientation: "vertical" });
       }
 
-      
+      if (
+        allowHorizontal &&
+        canPlacePair({
+          occupied,
+          buildings,
+          player,
+          x,
+          y,
+          size,
+          orientation: "horizontal",
+          expectedTerrain,
+        })
+      ) {
+        results.push({ x, y, orientation: "horizontal" });
+      }
     }
   }
 

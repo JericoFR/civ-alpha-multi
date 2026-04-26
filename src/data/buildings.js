@@ -1,20 +1,67 @@
 import { BOARD } from "./board.js";
-import { isMilitaryUnit } from "../logic/movement.js";
 
 export const BUILDING_DEFS = {
   townhall: { key: "townhall", name: "Hôtel de Ville", housing: 2, cost: {}, height: 2 },
   house: { key: "house", name: "Chaumière", housing: 3, cost: { gold: 3 }, height: 2 },
-  production_food: { key: "production_food", name: "Champ", resource: "food", productionBase: 2, productionWorkerBonus: 1, cost: {}, height: 2 },
-  production_gold: { key: "production_gold", name: "Mine d’or", resource: "gold", productionBase: 2, productionWorkerBonus: 1, cost: {}, height: 2 },
+
+  production_food: {
+    key: "production_food",
+    name: "Champ",
+    resource: "food",
+    productionBase: 2,
+    productionWorkerBonus: 1,
+    subCategory: "production",
+    cost: {},
+    height: 2,
+  },
+
+  production_gold: {
+    key: "production_gold",
+    name: "Mine d’or",
+    resource: "gold",
+    productionBase: 2,
+    productionWorkerBonus: 1,
+    subCategory: "production",
+    cost: {},
+    height: 2,
+  },
+
   barracks_1: { key: "barracks_1", name: "Caserne I", cost: { gold: 3 }, height: 2 },
   barracks_2: { key: "barracks_2", name: "Caserne fortifiée", cost: { gold: 6 }, height: 2 },
   palisade: { key: "palisade", name: "Palissade", cost: { gold: 1 }, height: 2, burnThreshold: 3, blocksEnemyMovement: true },
-  market: { key: "market", name: "Marché", cost: { gold: 3 }, height: 2 },
+
+  market: {
+    key: "market",
+    name: "Marché",
+    subCategory: "economic",
+    cost: { gold: 3 },
+    height: 2,
+  },
+
   school: { key: "school", name: "École", sciencePerWorker: 1, cost: { gold: 3 }, height: 2 },
   aqueduct: { key: "aqueduct", name: "Aqueduc", cost: { gold: 3 }, height: 2 },
   castrum: { key: "castrum", name: "Castrum", cost: { gold: 4 }, height: 2 },
-  forum: { key: "forum", name: "Forum", cost: { gold: 2 }, height: 2 },
+
+  forum: {
+    key: "forum",
+    name: "Forum",
+    subCategory: "economic",
+    cost: { gold: 2 },
+    height: 2,
+  },
+
   coliseum: { key: "coliseum", name: "Colisée", cost: { gold: 12 }, housing: 2, height: 2 },
+
+  nil_farm: {
+    key: "nil_farm",
+    name: "Ferme du Nil",
+    resource: "food",
+    productionBase: 2,
+    productionWorkerBonus: 1,
+    subCategory: "economic",
+    cost: { gold: 3 },
+    height: 2,
+  },
 };
 
 export function getBuildingDef(buildingOrType) {
@@ -25,15 +72,6 @@ export function getBuildingDef(buildingOrType) {
   return null;
 }
 
-export function normalizeBuildingCells(building) {
-  if (!building) return [];
-  const size = building.size ?? 2;
-  const orientation = building.orientation ?? "vertical";
-  if (orientation === "horizontal") {
-    return Array.from({ length: size }, (_, index) => ({ x: building.x + index, y: building.y }));
-  }
-  return Array.from({ length: size }, (_, index) => ({ x: building.x, y: building.y + index }));
-}
 
 export const INITIAL_BUILDINGS = [
   { id: "p1-townhall", player: 1, type: "townhall", x: 6, y: 0, orientation: "vertical", size: 2 },
